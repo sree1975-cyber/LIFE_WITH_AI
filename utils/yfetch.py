@@ -44,14 +44,18 @@ def fetch_yfinance_data(symbol, start_date=None, end_date=None, period=None, int
     for attempt in range(1, retries + 1):
         try:
             if period == "MAX":
-                data = yf.download(symbol, period="max", interval=interval)
+                data = yf.download(symbol, period="max", interval=interval, auto_adjust=True, prepost=False)
             else:
-                data = yf.download(symbol, start=start_date, end=end_date, interval=interval)
+                data = yf.download(symbol, start=start_date, end=end_date, interval=interval, auto_adjust=True, prepost=False)
             
             if data.empty:
-                if period and period not in ["1D", "1M"]:
-                    logger.info(f"Falling back to 1M for {symbol}")
-                    data = yf.download(symbol, period="1mo", interval=interval)
+                # Try fallback periods
+                for fallback_period in ["1mo", "5d"]:
+                    if period and period not in ["1D", "5D", "1M"]:
+                        logger.info(f"Falling back to {fallback_period} for {symbol}")
+                        data = yf.download(symbol, period=fallback_period, interval=interval, auto_adjust=True, prepost=False)
+                        if not data.empty:
+                            break
                 if data.empty:
                     raise ValueError(f"No data returned for {symbol} from {start_date.date() if start_date else 'start'} to {end_date.date()}")
             
