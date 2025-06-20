@@ -35,10 +35,12 @@ def fetch_yfinance_data(symbol, start_date=None, end_date=None, period=None, ret
             raise ValueError(f"Invalid period: {period}")
         start_date, end_date = period_map[period]
 
-    # Ensure end_date is not in the future
-    if end_date is not None and end_date > now:
-        logger.info(f"Adjusting end_date from {end_date} to {now} (today)")
-        end_date = now
+    # Ensure end_date is not in the future (and not today, unless after market close)
+    if end_date is not None:
+        # If today, use yesterday (because today's data may not be available yet)
+        if end_date.date() >= now.date():
+            end_date = now - timedelta(days=1)
+            logger.info(f"Adjusted end_date to {end_date.date()} to avoid future/today's incomplete data.")
 
     # Ensure start_date is before end_date
     if start_date is not None and end_date is not None and start_date >= end_date:
