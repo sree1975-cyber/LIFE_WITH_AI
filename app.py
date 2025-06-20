@@ -58,12 +58,12 @@ if data_source == "Yahoo Finance":
             st.session_state.symbol = symbol_selection
         
         if st.session_state.symbol == "CING":
-            st.info("CING data is available from December 2021. Use periods like 1M or Custom (post-2021).")
+            st.info("CING data is available from December 2021. Use periods like 1M, real-time, or Custom (post-2021).")
     
     with col2:
-        periods = ["1D", "5D", "15D", "30D", "1M", "3M", "6M", "YTD", "1Y", "2Y", "3Y", "5Y", "MAX", "Custom"]
+        periods = ["real-time", "1D", "5D", "15D", "30D", "1M", "3M", "6M", "YTD", "1Y", "2Y", "3Y", "5Y", "MAX", "Custom"]
         st.session_state.period = st.selectbox("Select Period", periods, 
-                                               index=periods.index(st.session_state.period),
+                                               index=periods.index(st.session_state.period) if st.session_state.period in periods else 8,  # Default to 1Y
                                                key="period_select")
     
     if st.session_state.period == "Custom":
@@ -109,12 +109,12 @@ if data_source == "Yahoo Finance":
                         if st.session_state.data.empty:
                             st.error(
                                 f"No data found for {st.session_state.symbol} in period {st.session_state.period}. "
-                                f"Try 1M, YTD, or Custom. If issues persist, check your network or try File Import."
+                                f"Try real-time, 1M, YTD, or Custom. If issues persist, check your network or try File Import."
                             )
                         else:
                             st.success(f"Data loaded for {st.session_state.symbol}")
                     except Exception as e:
-                        st.error(f"Error loading data: {str(e)}. Try a different period (e.g., 1M, YTD) or check your network connection.")
+                        st.error(f"Error loading data: {str(e)}. Try real-time, 1M, YTD, or check your network connection.")
     
     with col6:
         if st.button("Clear", key="clear"):
@@ -124,9 +124,7 @@ if data_source == "Yahoo Finance":
             st.session_state.start_date = None
             st.session_state.end_date = None
             st.session_state.is_custom_symbol = False
-            st.rerun()  # Updated to use st.rerun() instead of st.experimental_rerun()
-
-
+            st.rerun()
 
 # File Import UI
 else:
