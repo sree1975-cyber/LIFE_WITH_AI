@@ -8,65 +8,73 @@ from datetime import datetime, timedelta
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def fetch_yfinance_data(symbol, start_date=None, end_date=None, period=None, retries=3, delay=2):
+@st.cache_data(ttl=60)
+def fetch_yfinance_data(symbol, start_date=None, end_date=None, period=None, interval="1d", retries=3, delay=2):
     """Fetch stock data from yfinance for the given symbol and period or date range."""
     logger.info(f"Fetching data for {symbol}, period: {period}, start: {start_date}, end: {end_date}")
     
-    # Map periods to date ranges
     if period and not (start_date and end_date):
-        now = datetime.now()
+        end_date = pd.to_datetime('today')
         period_map = {
-            "1D": (now - timedelta(days=1), now),
-            "5D": (now - timedelta(days=5), now),
-            "15D": (now - timedelta(days=15), now),
-            "30D": (now - timedelta(days=30), now),
-            "1M": (now - timedelta(days=30), now),
-            "3M": (now - timedelta(days=90), now),
-            "6M": (now - timedelta(days=180), now),
-            "YTD": (datetime(now.year, 1, 1), now),
-            "1Y": (now - timedelta(days=365), now + timedelta(days=1)),  # Include today
-            "2Y": (now - timedelta(days=730), now + timedelta(days=1)),
-            "3Y": (now - timedelta(days=1095), now + timedelta(days=1)),
-            "5Y": (now - timedelta(days=1825), now + timedelta(days=1)),
-            "MAX": (datetime(1970, 1, 1), now + timedelta(days=1))
+            "1D": 1,
+            "5D": 5,
+            "15D": 15,
+            "30D": 30,
+            "1M": 30,
+            "3M": 90,
+            "6M": 180,
+            "YTD": (pd.to_datetime('today') - pd.Timestamp(year=pd.to_datetime('today').year, month=1, day=1)).days,
+            "1Y": 365,
+            "2Y": 730,
+            "3Y": 1095,
+            "5Y": 1825,
+            "MAX": None
         }
         if period not in period_map:
             raise ValueError(f"Invalid period: {period}")
-        start_date, end_date = period_map[period]
+        if period == "MAX":
+            start_date = None
+        else:
+            start_date = end_date - pd.Timedelta(days=period_map[period])
     
-    # Ensure dates are datetime
-    start_date = pd.Timestamp(start_date).to_pydatetime()
-    end_date = pd.Timestamp(end_date).to_pydatetime()
+    start_date = pd.Timestamp(start_date) if start_date else None
+    end_date = pd.Timestamp(end_date) if end_date else pd.to_datetime('today')
     
     for attempt in range(1, retries + 1):
         try:
-            stock = yf.Ticker(symbol)
-            df = stock.history(start=start_date, end=end_date, interval="1d")
+            if period == "MAX":
+                data = yf.download(symbol, period="max", interval=interval)
+            else:
+                data = yf.download(symbol, start=start_date, end=end_date, interval=interval)
             
-            if df.empty:
-                # Fallback to shorter period if possible
+            if data.empty:
                 if period and period not in ["1D", "1M"]:
                     logger.info(f"Falling back to 1M for {symbol}")
-                    fallback_df = stock.history(period="1mo", interval="1d")
-                    if not fallback_df.empty:
-                        df = fallback_df
-                if df.empty:
-                    raise ValueError(f"No data returned for {symbol} from {start_date.date()} to {end_date.date()}")
+                    data = yf.download(symbol, period="1mo", interval=interval)
+                if data.empty:
+                    raise ValueError(f"No data returned for {symbol} from {start_date.date() if start_date else 'start'} to {end_date.date()}")
             
-            # Select required columns
+            if isinstance(data.columns, pd.MultiIndex):
+                data.columns = data.columns.get_level_values(0)
+            if not data.index.is_monotonic_increasing:
+                data = data.sort_index()
+            if data.index.duplicated().any():
+                logger.warning(f"Duplicate indices found for {symbol}. Dropping duplicates.")
+                data = data[~data.index.duplicated(keep='first')]
+            if data.index.tz is not None:
+                data.index = data.index.tz_localize(None)
+            
             required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
-            df = df[[col for col in required_columns if col in df.columns]]
+            data = data[[col for col in required_columns if col in data.columns]]
+            data.columns = [col.lower() for col in data.columns]
             
-            # Normalize column names
-            df.columns = [col.lower() for col in df.columns]
-            
-            logger.info(f"Successfully fetched data for {symbol} from {start_date.date()} to {end_date.date()}")
-            return df
+            logger.info(f"Successfully fetched data for {symbol} from {start_date.date() if start_date else 'start'} to {end_date.date()}")
+            return data
         
         except Exception as e:
             logger.warning(f"Attempt {attempt} failed for {symbol}: {str(e)}")
             if attempt == retries:
                 raise ValueError(f"Failed to fetch data for {symbol} after {retries} attempts: {str(e)}")
-            time.sleep(delay * (2 ** (attempt - 1)))  # Exponential backoff: 2s, 4s, 8s
+            time.sleep(delay * (2 ** (attempt - 1)))
     
     raise ValueError(f"Failed to fetch data for {symbol} after {retries} attempts")
