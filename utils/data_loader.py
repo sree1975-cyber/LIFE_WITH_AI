@@ -19,7 +19,7 @@ def load_yfinance_data(symbol, period, start_date=None, end_date=None):
                 raise ValueError("Start date must be before end date")
             if end_date > datetime.now():
                 raise ValueError("End date cannot be in the future")
-            data = fetch_yfinance_data(symbol, start_date, end_date)
+            data = fetch_yfinance_data(symbol, start_date=start_date, end_date=end_date)
         else:
             data = fetch_yfinance_data(symbol, period=period)
         
@@ -36,13 +36,18 @@ def load_yfinance_data(symbol, period, start_date=None, end_date=None):
                         f"Data is available from {start} to {end}. "
                         f"Try a period like {suggestions}."
                     )
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to fetch max data for {symbol}: {str(e)}")
             suggestions = "1M, Custom (post-2021)" if symbol == "CING" else "1M, YTD, Custom"
             raise ValueError(
                 f"No data found for {symbol} in period {period}. "
                 f"Try a period like {suggestions}, another symbol (e.g., AAPL), or use File Import."
             )
+        
+        # Ensure required columns
+        required_columns = {'open', 'high', 'low', 'close', 'volume'}
+        if not all(col in data.columns for col in required_columns):
+            raise ValueError(f"Data missing required columns: {required_columns}")
         
         # Normalize column names
         data.columns = [col.lower() for col in data.columns]
