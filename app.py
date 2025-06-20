@@ -58,12 +58,12 @@ if data_source == "Yahoo Finance":
             st.session_state.symbol = symbol_selection
         
         if st.session_state.symbol == "CING":
-            st.info("CING data is available from December 2021. Use periods like 1M, real-time, or Custom (post-2021).")
+            st.info("CING data is available from December 2021. Use periods like real-time, 1M, or Custom (post-2021).")
     
     with col2:
         periods = ["real-time", "1D", "5D", "15D", "30D", "1M", "3M", "6M", "YTD", "1Y", "2Y", "3Y", "5Y", "MAX", "Custom"]
         st.session_state.period = st.selectbox("Select Period", periods, 
-                                               index=periods.index(st.session_state.period) if st.session_state.period in periods else 8,  # Default to 1Y
+                                               index=periods.index(st.session_state.period) if st.session_state.period in periods else 9,  # Default to 1Y
                                                key="period_select")
     
     if st.session_state.period == "Custom":
@@ -92,7 +92,7 @@ if data_source == "Yahoo Finance":
             ):
                 st.error("Start date must be before end date, and end date cannot be in the future")
             else:
-                with st.spinner("Loading data from Yahoo Finance (this may take a few moments)..."):
+                with st.spinner("Loading data from Yahoo Finance..."):
                     try:
                         if st.session_state.period == "Custom":
                             st.session_state.data = load_yfinance_data(
