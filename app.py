@@ -35,7 +35,7 @@ if data_source == "Yahoo Finance":
     st.header("Yahoo Finance Data")
     col1, col2 = st.columns([2, 1])
     with col1:
-        st.session_state.symbol = st.text_input("Enter Stock Symbol (e.g., AAPL)", value=st.session_state.symbol)
+        st.session_state.symbol = st.text_input("Enter Stock Symbol (e.g., AAPL, TSLA)", value=st.session_state.symbol)
     with col2:
         periods = ["1D", "5D", "15D", "30D", "1M", "3M", "6M", "YTD", "1Y", "2Y", "3Y", "5Y", "MAX", "Custom"]
         st.session_state.period = st.selectbox("Select Period", periods, index=periods.index(st.session_state.period))
@@ -52,25 +52,26 @@ if data_source == "Yahoo Finance":
         if st.button("Submit"):
             # Validate symbol
             if not st.session_state.symbol or not re.match(r'^[A-Z0-9.-]+$', st.session_state.symbol):
-                st.error("Please enter a valid stock symbol (e.g., AAPL, MSFT)")
+                st.error("Please enter a valid stock symbol (e.g., AAPL, TSLA)")
             elif st.session_state.period == "Custom" and (st.session_state.start_date >= st.session_state.end_date or st.session_state.end_date > pd.to_datetime("today")):
                 st.error("Start date must be before end date, and end date cannot be in the future")
             else:
-                try:
-                    if st.session_state.period == "Custom":
-                        st.session_state.data = load_yfinance_data(
-                            st.session_state.symbol, 
-                            st.session_state.period, 
-                            start_date=st.session_state.start_date, 
-                            end_date=st.session_state.end_date
-                        )
-                    else:
-                        st.session_state.data = load_yfinance_data(st.session_state.symbol, st.session_state.period)
-                    st.success(f"Data loaded for {st.session_state.symbol}")
-                except ValueError as e:
-                    st.error(f"Error loading data: {str(e)}")
-                except Exception as e:
-                    st.error(f"Unexpected error: {str(e)}. Please check your internet connection or try a different symbol.")
+                with st.spinner("Loading data from Yahoo Finance..."):
+                    try:
+                        if st.session_state.period == "Custom":
+                            st.session_state.data = load_yfinance_data(
+                                st.session_state.symbol, 
+                                st.session_state.period, 
+                                start_date=st.session_state.start_date, 
+                                end_date=st.session_state.end_date
+                            )
+                        else:
+                            st.session_state.data = load_yfinance_data(st.session_state.symbol, st.session_state.period)
+                        st.success(f"Data loaded for {st.session_state.symbol}")
+                    except ValueError as e:
+                        st.error(f"Error loading data: {str(e)}")
+                    except Exception as e:
+                        st.error(f"Unexpected error: {str(e)}. Try again later or use a different symbol (e.g., AAPL).")
     with col6:
         if st.button("Clear"):
             st.session_state.data = None
