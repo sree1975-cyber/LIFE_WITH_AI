@@ -3,9 +3,6 @@ import pandas as pd
 import re
 from utils.data_loader import load_file_data, load_yfinance_data
 from utils.calculations import calculate_pl
-from utils.data_loader import load_yfinance_data
-from utils.data_loader import load_file_data, load_yfinance_data
-from utils.calculations import calculate_pl
 from utils.visualizations import create_monthly_pl_table, create_candlestick_chart
 from utils.indicators import calculate_indicators
 from utils.strategies import apply_strategies
@@ -59,7 +56,7 @@ if data_source == "Yahoo Finance":
         with col4:
             st.session_state.end_date = st.date_input("End Date", value=pd.to_datetime("today"))
     
-    col5, col6 = st stretches([2, 1])
+    col5, col6 = st.columns([2, 1])
     with col5:
         if st.button("Submit"):
             # Validate symbol
@@ -105,7 +102,7 @@ else:
         "Date": ["2025-06-20", "2025-06-19"],
         "Open": [2.0, 1.95],
         "High": [2.1, 2.0],
-        "Low"::
+        "Low": [1.9, 1.9],
         "Close": [2.05, 2.0],
         "Volume": [100000, 120000]
     }).set_index("Date")
