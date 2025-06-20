@@ -62,4 +62,4 @@ def load_file_data(uploaded_file):
         return data
     except Exception as e:
         logger.error(f"Error processing file {uploaded_file.name}: {str(e)}")
-        raise ValueError(f"Error processing file: {str(e)}")
+    raise ValueError(f"Error processing file: {str(e)}")
