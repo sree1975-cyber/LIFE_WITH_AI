@@ -16,9 +16,10 @@ def fetch_yfinance_data(symbol, start_date=None, end_date=None, period=None, int
     
     # Validate interval based on period
     if period in ["1D", "5D"] and interval not in ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "1d"]:
-        interval = "1d"  # Default to daily for longer periods
+        interval = "1d"
         logger.info(f"Adjusted interval to '1d' for period {period}")
     
+    # Map periods to days for date range calculation
     if period and not (start_date and end_date):
         end_date = pd.to_datetime('today')
         period_map = {
@@ -36,10 +37,13 @@ def fetch_yfinance_data(symbol, start_date=None, end_date=None, period=None, int
             "5Y": 1825,
             "MAX": None
         }
-        if period not in period_map:
+        if period not in period_map and period != "real-time":
             raise ValueError(f"Invalid period: {period}")
         if period == "MAX":
             start_date = None
+        elif period == "real-time":
+            interval = "1m"  # Force 1-minute interval for real-time
+            start_date = end_date - pd.Timedelta(days=1)
         else:
             start_date = end_date - pd.Timedelta(days=period_map[period])
     
@@ -48,20 +52,21 @@ def fetch_yfinance_data(symbol, start_date=None, end_date=None, period=None, int
     
     for attempt in range(1, retries + 1):
         try:
-            # Use yf.Ticker for more reliable data fetching
-            ticker = yf.Ticker(symbol)
-            if period == "MAX":
-                data = ticker.history(period="max", interval=interval)
+            if period == "real-time":
+                data = yf.download(symbol, period="1d", interval="1m")
+            elif period == "MAX":
+                data = yf.download(symbol, period="max", interval=interval)
             else:
-                data = ticker.history(start=start_date, end=end_date, interval=interval)
+                data = yf.download(symbol, start=start_date, end=end_date, interval=interval)
             
             if data.empty:
                 logger.warning(f"No data returned for {symbol} on attempt {attempt}")
-                if period and period not in ["1D", "1M"]:
+                if period not in ["1D", "1M", "real-time"]:
                     logger.info(f"Falling back to 1M for {symbol}")
-                    data = ticker.history(period="1mo", interval="1d")
+                    data = yf.download(symbol, period="1mo", interval="1d")
                 if data.empty:
-                    raise ValueError(f"No data returned for {symbol} from {start_date.date() if start_date else 'start'} to {end_date.date()}")
+                    st.error(f"No data found for {symbol} from {start_date.date() if start_date else 'start'} to {end_date.date()}.")
+                    return pd.DataFrame()
             
             # Handle multi-index columns
             if isinstance(data.columns, pd.MultiIndex):
@@ -87,7 +92,8 @@ def fetch_yfinance_data(symbol, start_date=None, end_date=None, period=None, int
         except Exception as e:
             logger.warning(f"Attempt {attempt} failed for {symbol}: {str(e)}")
             if attempt == retries:
-                raise ValueError(f"Failed to fetch data for {symbol} after {retries} attempts: {str(e)}")
+                st.error(f"Failed to fetch data for {symbol} after {retries} attempts: {str(e)}")
+                return pd.DataFrame()
             time.sleep(delay * (2 ** (attempt - 1)))
     
-    raise ValueError(f"Failed to fetch data for {symbol} after {retries} attempts")
+    return pd.DataFrame()
