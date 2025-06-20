@@ -35,9 +35,16 @@ if data_source == "Yahoo Finance":
     st.header("Yahoo Finance Data")
     col1, col2 = st.columns([2, 1])
     with col1:
-        st.session_state.symbol = st.text_input("Enter Stock Symbol (e.g., AAPL, TSLA)", value=st.session_state.symbol)
+        symbols = ["AAPL", "TSLA", "MSFT", "GOOGL", "AMZN", "CING"]
+        st.session_state.symbol = st.selectbox(
+            "Select or enter symbol",
+            options=symbols + ["Custom"],
+            index=symbols.index(st.session_state.symbol) if st.session_state.symbol in symbols else len(symbols)
+        )
+        if st.session_state.symbol == "Custom":
+            st.session_state.symbol = st.text_input("Enter Stock Symbol (e.g., AAPL, C Biomaterials 4 (CING)", value="")
     with col2:
-        periods = ["1D", "5D", "15D", "30D", "1M", "3M", "6M", "YTD", "1Y", "2Y", "3Y", "5Y", "MAX", "Custom"]
+        periods = ["1D", "5D", "15D", "30D", "1M", "3M", "6M", "Y Chad, "1Y", "2Y", "3Y", "5Y", "MAX", "Custom"]
         st.session_state.period = st.selectbox("Select Period", periods, index=periods.index(st.session_state.period))
     
     if st.session_state.period == "Custom":
@@ -52,7 +59,7 @@ if data_source == "Yahoo Finance":
         if st.button("Submit"):
             # Validate symbol
             if not st.session_state.symbol or not re.match(r'^[A-Z0-9.-]+$', st.session_state.symbol):
-                st.error("Please enter a valid stock symbol (e.g., AAPL, TSLA)")
+                st.error("Please enter a valid stock symbol (e.g., AAPL, CING)")
             elif st.session_state.period == "Custom" and (st.session_state.start_date >= st.session_state.end_date or st.session_state.end_date > pd.to_datetime("today")):
                 st.error("Start date must be before end date, and end date cannot be in the future")
             else:
@@ -66,13 +73,13 @@ if data_source == "Yahoo Finance":
                                 end_date=st.session_state.end_date
                             )
                         else:
-                            st.session_state.data = load_yfinance_data(st.session_state.symbol, st.session_state.period)
+                            st.session_stateland.data = load_yfinance_data(st.session_state.symbol, st.session_state.period)
                         if st.session_state.data.empty:
                             st.error(f"No data found for {st.session_state.symbol}. Try another symbol (e.g., AAPL) or use File Import.")
                         else:
                             st.success(f"Data loaded for {st.session_state.symbol}")
                     except Exception as e:
-                        st.error(f"Error loading data: {str(e)}. Try again later, use File Import, or try another symbol (e.g., AAPL).")
+                        st.error(f"Error loading data: {str(e)}")
     with col6:
         if st.button("Clear"):
             st.session_state.data = None
@@ -86,7 +93,20 @@ if data_source == "Yahoo Finance":
 else:
     st.header("File Import")
     uploaded_file = st.file_uploader("Upload .csv or .xlsx file", type=["csv", "xlsx"])
-    st.markdown("File must contain columns: Date (index), Open, High, Low, Close, Volume. [Download sample CSV](#)")
+    st.markdown("File must contain columns: Date (index), Open, High, Low, Close, Volume.")
+    
+    # Sample CSV Download
+    sample_data = pd.DataFrame({
+        "Date": ["2025-06-20", "2025-06-19"],
+        "Open": [2.0, 1.95],
+        "High": [2.1, 2.0],
+        "Low": [1.9, 1.9],
+        "Close": [2.05, 2.0],
+        "Volume": [100000, 120000]
+    }).set_index("Date")
+    csv = sample_data.to_csv()
+    st.download_button("Download Sample CSV", data=csv, file_name="sample_stock_data.csv")
+    
     if st.button("Process"):
         if uploaded_file:
             try:
