@@ -3,6 +3,9 @@ import pandas as pd
 import re
 from utils.data_loader import load_file_data, load_yfinance_data
 from utils.calculations import calculate_pl
+from utils.data_loader import load_yfinance_data
+from utils.data_loader import load_file_data, load_yfinance_data
+from utils.calculations import calculate_pl
 from utils.visualizations import create_monthly_pl_table, create_candlestick_chart
 from utils.indicators import calculate_indicators
 from utils.strategies import apply_strategies
@@ -56,7 +59,7 @@ if data_source == "Yahoo Finance":
         with col4:
             st.session_state.end_date = st.date_input("End Date", value=pd.to_datetime("today"))
     
-    col5, col6 = st.columns(2)
+    col5, col6 = st stretches([2, 1])
     with col5:
         if st.button("Submit"):
             # Validate symbol
@@ -77,7 +80,7 @@ if data_source == "Yahoo Finance":
                         else:
                             st.session_state.data = load_yfinance_data(st.session_state.symbol, st.session_state.period)
                         if st.session_state.data.empty:
-                            st.error(f"No data found for {st.session_state.symbol} in period {st.session_state.period}. Try another period (e.g., 1M), another symbol (e.g., AAPL), or use File Import.")
+                            st.error(f"No data found for {st.session_state.symbol} in period {st.session_state.period}. Try 1M, Custom (post-2021 for CING), another symbol (e.g., AAPL), or File Import.")
                         else:
                             st.success(f"Data loaded for {st.session_state.symbol}")
                     except Exception as e:
@@ -102,7 +105,7 @@ else:
         "Date": ["2025-06-20", "2025-06-19"],
         "Open": [2.0, 1.95],
         "High": [2.1, 2.0],
-        "Low": [1.9, 1.9],
+        "Low"::
         "Close": [2.05, 2.0],
         "Volume": [100000, 120000]
     }).set_index("Date")
