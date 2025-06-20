@@ -24,7 +24,7 @@ def load_yfinance_data(symbol, period, start_date=None, end_date=None):
             data = fetch_yfinance_data(symbol, period=period)
         
         if data.empty:
-            suggestions = "real-time, 1M, YTD, Custom (post-2021)" if symbol == "CING" else "real-time, 1M, YTD, Custom"
+            suggestions = "real-time, 1mo, ytd, Custom (post-2021)" if symbol == "CING" else "real-time, 1mo, ytd, Custom"
             raise ValueError(
                 f"No data found for {symbol} in period {period}. "
                 f"Try a period like {suggestions}, another symbol (e.g., AAPL), or use File Import."
@@ -62,4 +62,4 @@ def load_file_data(uploaded_file):
         return data
     except Exception as e:
         logger.error(f"Error processing file {uploaded_file.name}: {str(e)}")
-    raise ValueError(f"Error processing file: {str(e)}")
+        raise ValueError(f"Error processing file: {str(e)}")
