@@ -1,7 +1,9 @@
 import streamlit as st
 import pandas as pd
 import re
-from utils.data_loader import load_file_data, load_yfinance_data
+from datetime import datetime, timedelta
+import yfinance as yf
+from utils.data_loader import load_file_data
 from utils.calculations import calculate_pl
 from utils.visualizations import create_monthly_pl_table, create_candlestick_chart
 from utils.indicators import calculate_indicators
@@ -17,7 +19,7 @@ if 'data' not in st.session_state:
 if 'symbol' not in st.session_state:
     st.session_state.symbol = "AAPL"
 if 'period' not in st.session_state:
-    st.session_state.period = "1Y"
+    st.session_state.period = "1y"
 if 'start_date' not in st.session_state:
     st.session_state.start_date = None
 if 'end_date' not in st.session_state:
@@ -52,32 +54,44 @@ if data_source == "Yahoo Finance":
                 "Enter Stock Symbol (e.g., AAPL, CING)",
                 value=st.session_state.symbol if st.session_state.is_custom_symbol else "",
                 key="custom_symbol"
-            )
+            ).upper()
         else:
             st.session_state.is_custom_symbol = False
             st.session_state.symbol = symbol_selection
         
         if st.session_state.symbol == "CING":
-            st.info("CING data is available from December 2021. Use periods like 1M or Custom (post-2021).")
+            st.info("CING data is available from December 2021. Use periods like 1mo or Custom (post-2021).")
     
     with col2:
-        periods = ["1D", "5D", "15D", "30D", "1M", "3M", "6M", "YTD", "1Y", "2Y", "3Y", "5Y", "MAX", "Custom"]
-        st.session_state.period = st.selectbox("Select Period", periods, 
-                                               index=periods.index(st.session_state.period),
-                                               key="period_select")
+        period_type = st.selectbox(
+            "Period Type",
+            ["Predefined", "Custom Range"],
+            key="period_type_select"
+        )
+        
+        if period_type == "Predefined":
+            periods = ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "ytd", "max"]
+            st.session_state.period = st.selectbox(
+                "Select Period",
+                periods,
+                index=periods.index(st.session_state.period) if st.session_state.period in periods else 5,
+                key="period_select"
+            )
+        else:
+            st.session_state.period = "Custom"
     
-    if st.session_state.period == "Custom":
+    if period_type == "Custom Range":
         col3, col4 = st.columns(2)
         with col3:
             st.session_state.start_date = st.date_input(
-                "Start Date", 
-                value=pd.to_datetime("today") - pd.Timedelta(days=365),
+                "Start Date",
+                value=datetime.now() - timedelta(days=365),
                 key="start_date"
             )
         with col4:
             st.session_state.end_date = st.date_input(
-                "End Date", 
-                value=pd.to_datetime("today"),
+                "End Date",
+                value=datetime.now(),
                 key="end_date"
             )
     
@@ -92,39 +106,72 @@ if data_source == "Yahoo Finance":
             ):
                 st.error("Start date must be before end date, and end date cannot be in the future")
             else:
-                with st.spinner("Loading data from Yahoo Finance..."):
+                with st.spinner("Downloading data from Yahoo Finance..."):
                     try:
                         if st.session_state.period == "Custom":
-                            st.session_state.data = load_yfinance_data(
-                                st.session_state.symbol, 
-                                st.session_state.period, 
-                                start_date=st.session_state.start_date, 
-                                end_date=st.session_state.end_date
+                            data = yf.download(
+                                st.session_state.symbol,
+                                start=st.session_state.start_date,
+                                end=st.session_state.end_date,
+                                interval="1d"
                             )
                         else:
-                            st.session_state.data = load_yfinance_data(
-                                st.session_state.symbol, 
-                                st.session_state.period
+                            data = yf.download(
+                                st.session_state.symbol,
+                                period=st.session_state.period,
+                                interval="1d"
                             )
-                        if st.session_state.data.empty:
-                            st.error(
-                                f"No data found for {st.session_state.symbol} in period {st.session_state.period}. "
-                                f"Try 1M, Custom (post-2021 for CING), another symbol (e.g., AAPL), or File Import."
-                            )
+                        
+                        if data.empty:
+                            suggestions = "1mo, Custom (post-2021)" if st.session_state.symbol == "CING" else "1mo, ytd, Custom"
+                            try:
+                                max_data = yf.download(st.session_state.symbol, period="max")
+                                if not max_data.empty:
+                                    start = max_data.index[0].date()
+                                    end = max_data.index[-1].date()
+                                    st.error(
+                                        f"No data found for {st.session_state.symbol} in period {st.session_state.period}. "
+                                        f"Data is available from {start} to {end}. Try a period like {suggestions}."
+                                    )
+                                else:
+                                    st.error(
+                                        f"No data found for {st.session_state.symbol} in period {st.session_state.period}. "
+                                        f"Try a period like {suggestions}, another symbol (e.g., AAPL), or File Import."
+                                    )
+                            except:
+                                st.error(
+                                    f"No data found for {st.session_state.symbol} in period {st.session_state.period}. "
+                                    f"Try a period like {suggestions}, another symbol (e.g., AAPL), or File Import."
+                                )
                         else:
+                            if isinstance(data.columns, pd.MultiIndex):
+                                data.columns = data.columns.get_level_values(0)
+                            if not data.index.is_monotonic_increasing:
+                                data = data.sort_index()
+                            if data.index.duplicated().any():
+                                data = data[~data.index.duplicated(keep='first')]
+                            if data.index.tz is not None:
+                                data.index = data.index.tz_localize(None)
+                            
+                            required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+                            data = data[[col for col in required_columns if col in data.columns]]
+                            data.columns = [col.lower() for col in data.columns]
+                            
+                            st.session_state.data = data
                             st.success(f"Data loaded for {st.session_state.symbol}")
                     except Exception as e:
-                        st.error(f"Error loading data: {str(e)}")
+                        st.error(f"Error downloading data: {str(e)}")
     
     with col6:
         if st.button("Clear", key="clear"):
             st.session_state.data = None
+            st.session_state Emscriptenclear
             st.session_state.symbol = "AAPL"
-            st.session_state.period = "1Y"
+            st.session_state.period = "1y"
             st.session_state.start_date = None
             st.session_state.end_date = None
             st.session_state.is_custom_symbol = False
-            st.experimental_rerun()
+            st.rerun()
 
 # File Import UI
 else:
@@ -155,7 +202,7 @@ else:
     
     if st.button("Clear", key="clear_file"):
         st.session_state.data = None
-        st.experimental_rerun()
+        st.rerun()
 
 # Display Data and Analysis
 if st.session_state.data is not None and not st.session_state.data.empty:
@@ -166,7 +213,6 @@ if st.session_state.data is not None and not st.session_state.data.empty:
     
     if data_source == "Yahoo Finance":
         try:
-            import yfinance as yf
             ticker = yf.Ticker(st.session_state.symbol)
             hist_data = ticker.history(period="max")
             if not hist_data.empty:
