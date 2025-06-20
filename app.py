@@ -91,20 +91,20 @@ if data_source == "Yahoo Finance":
     if period_type == "Custom Range":
         col3, col4 = st.columns(2)
         with col3:
-            start_date_input = st.date_input(
+            start_date = st.date_input(
                 "Start Date",
                 value=st.session_state.start_date,
                 key="start_date"
             )
         with col4:
-            end_date_input = st.date_input(
+            end_date = st.date_input(
                 "End Date",
                 value=st.session_state.end_date,
                 key="end_date"
             )
     else:
-        start_date_input = None
-        end_date_input = None
+        start_date = None
+        end_date = None
     
     col5, col6 = st.columns([2, 1])
     with col5:
@@ -112,8 +112,8 @@ if data_source == "Yahoo Finance":
             if not st.session_state.symbol:
                 st.warning("⚠️ Please enter a stock symbol")
             elif period_type == "Custom Range" and (
-                pd.Timestamp(start_date_input) >= pd.Timestamp(end_date_input) or 
-                pd.Timestamp(end_date_input) > pd.Timestamp.now()
+                pd.Timestamp(start_date) >= pd.Timestamp(end_date) or 
+                pd.Timestamp(end_date) > pd.Timestamp.now()
             ):
                 st.error("Start date must be before end date, and end date cannot be in the future")
             elif not re.match(r'^[A-Z0-9.-]+$', st.session_state.symbol):
@@ -122,53 +122,33 @@ if data_source == "Yahoo Finance":
                 with st.spinner("Downloading data from YFinance..."):
                     for attempt in range(1, 5):  # Retry up to 4 times
                         try:
-                            logger.info(f"Attempt {attempt}: Downloading data for {st.session_state.symbol}, period: {period if period else 'Custom'}, start: {start_date_input}, end: {end_date_input}")
+                            logger.info(f"Attempt {attempt}: Downloading data for {st.session_state.symbol}, period: {period if period else 'Custom'}, start: {start_date}, end: {end_date}")
                             if period_type == "Custom Range":
                                 data = yf.download(
                                     st.session_state.symbol,
-                                    start=start_date_input,
-                                    end=end_date_input,
-                                    interval="1d",
-                                    progress=False
+                                    start=start_date,
+                                    end=end_date,
+                                    interval="1d"
                                 )
-                                st.session_state.start_date = start_date_input
-                                st.session_state.end_date = end_date_input
-                                st.session_state.period = f"{start_date_input} to {end_date_input}"
+                                st.session_state.start_date = start_date
+                                st.session_state.end_date = end_date
+                                st.session_state.period = f"{start_date} to {end_date}"
                             else:
                                 data = yf.download(
                                     st.session_state.symbol,
                                     period=period,
-                                    interval="1d",
-                                    progress=False
+                                    interval="1d"
                                 )
                                 st.session_state.period = period
                             
-                            if data.empty:
+                            if data is None or data.empty:
                                 logger.warning(f"Empty data returned for {st.session_state.symbol}, period: {st.session_state.period}")
                                 if attempt < 4:
                                     time.sleep(3 * attempt)  # Exponential backoff
                                     continue
                                 suggestions = "1mo, Custom (post-2021)" if st.session_state.symbol == "CING" else "1mo, ytd, Custom"
-                                try:
-                                    max_data = yf.download(st.session_state.symbol, period="max", progress=False)
-                                    if not max_data.empty:
-                                        start = max_data.index[0].date()
-                                        end = max_data.index[-1].date()
-                                        st.error(
-                                            f"No data found for {st.session_state.symbol} in period {st.session_state.period}. "
-                                            f"Data is available from {start} to {end}. Try a period like {suggestions}."
-                                        )
-                                    else:
-                                        st.error(
-                                            f"No data found for {st.session_state.symbol} in period {st.session_state.period}. "
-                                            f"Try a period like {suggestions}, another symbol (e.g., AAPL), or File Import."
-                                        )
-                                except Exception as e:
-                                    logger.error(f"Error fetching max data for {st.session_state.symbol}: {str(e)}")
-                                    st.error(
-                                        f"No data found for {st.session_state.symbol} in period {st.session_state.period}. "
-                                        f"Try a period like {suggestions}, another symbol (e.g., AAPL), or File Import."
-                                    )
+                                st.error(f"❌ No data found for {st.session_state.symbol} in period {st.session_state.period}. "
+                                         f"Try a period like {suggestions}, another symbol (e.g., AAPL), or File Import.")
                             else:
                                 if isinstance(data.columns, pd.MultiIndex):
                                     data.columns = data.columns.get_level_values(0)
@@ -183,7 +163,7 @@ if data_source == "Yahoo Finance":
                                 required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
                                 if not all(col in data.columns for col in required_columns):
                                     logger.error(f"Missing required columns in data for {st.session_state.symbol}: {data.columns}")
-                                    st.error("Data missing required columns: Open, High, Low, Close, Volume")
+                                    st.error("❌ Data missing required columns: Open, High, Low, Close, Volume")
                                     break
                                 
                                 data.columns = [col.lower() for col in data.columns]
