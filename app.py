@@ -92,7 +92,7 @@ if data_source == "Yahoo Finance":
             ):
                 st.error("Start date must be before end date, and end date cannot be in the future")
             else:
-                with st.spinner("Loading data from Yahoo Finance..."):
+                with st.spinner("Loading data from Yahoo Finance (this may take a few moments)..."):
                     try:
                         if st.session_state.period == "Custom":
                             st.session_state.data = load_yfinance_data(
@@ -109,12 +109,12 @@ if data_source == "Yahoo Finance":
                         if st.session_state.data.empty:
                             st.error(
                                 f"No data found for {st.session_state.symbol} in period {st.session_state.period}. "
-                                f"Try 1M, Custom (post-2021 for CING), another symbol (e.g., AAPL), or File Import."
+                                f"Try 1M, YTD, or Custom. If issues persist, check your network or try File Import."
                             )
                         else:
                             st.success(f"Data loaded for {st.session_state.symbol}")
                     except Exception as e:
-                        st.error(f"Error loading data: {str(e)}")
+                        st.error(f"Error loading data: {str(e)}. Try a different period (e.g., 1M, YTD) or check your network connection.")
     
     with col6:
         if st.button("Clear", key="clear"):
@@ -124,7 +124,9 @@ if data_source == "Yahoo Finance":
             st.session_state.start_date = None
             st.session_state.end_date = None
             st.session_state.is_custom_symbol = False
-            st.experimental_rerun()
+            st.rerun()  # Updated to use st.rerun() instead of st.experimental_rerun()
+
+
 
 # File Import UI
 else:
