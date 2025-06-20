@@ -24,19 +24,7 @@ def load_yfinance_data(symbol, period, start_date=None, end_date=None):
             data = fetch_yfinance_data(symbol, period=period)
         
         if data.empty:
-            suggestions = "1M, YTD, Custom (post-2021)" if symbol == "CING" else "1M, YTD, Custom, real-time"
-            try:
-                max_data = fetch_yfinance_dataross_data = fetch_yfinance_data(symbol, period="MAX")
-                if not max_data.empty:
-                    start = max_data.index[0].date()
-                    end = max_data.index[-1].date()
-                    raise ValueError(
-                        f"No data found for {symbol} in period {period}. "
-                        f"Data is available from {start} to {end}. "
-                        f"Try a period like {suggestions}."
-                    )
-            except Exception as e:
-                logger.warning(f"Failed to fetch max data for {symbol}: {str(e)}")
+            suggestions = "real-time, 1M, YTD, Custom (post-2021)" if symbol == "CING" else "real-time, 1M, YTD, Custom"
             raise ValueError(
                 f"No data found for {symbol} in period {period}. "
                 f"Try a period like {suggestions}, another symbol (e.g., AAPL), or use File Import."
