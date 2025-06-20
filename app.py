@@ -67,11 +67,12 @@ if data_source == "Yahoo Finance":
                             )
                         else:
                             st.session_state.data = load_yfinance_data(st.session_state.symbol, st.session_state.period)
-                        st.success(f"Data loaded for {st.session_state.symbol}")
-                    except ValueError as e:
-                        st.error(f"Error loading data: {str(e)} Try another symbol (e.g., AAPL) or use File Import.")
+                        if st.session_state.data.empty:
+                            st.error(f"No data found for {st.session_state.symbol}. Try another symbol (e.g., AAPL) or use File Import.")
+                        else:
+                            st.success(f"Data loaded for {st.session_state.symbol}")
                     except Exception as e:
-                        st.error(f"Unexpected error: {str(e)}. Try again later, use File Import, or try another symbol (e.g., AAPL).")
+                        st.error(f"Error loading data: {str(e)}. Try again later, use File Import, or try another symbol (e.g., AAPL).")
     with col6:
         if st.button("Clear"):
             st.session_state.data = None
@@ -85,7 +86,7 @@ if data_source == "Yahoo Finance":
 else:
     st.header("File Import")
     uploaded_file = st.file_uploader("Upload .csv or .xlsx file", type=["csv", "xlsx"])
-    st.markdown("File must contain columns: Date (index), Open, High, Low, Close, Volume")
+    st.markdown("File must contain columns: Date (index), Open, High, Low, Close, Volume. [Download sample CSV](#)")
     if st.button("Process"):
         if uploaded_file:
             try:
@@ -100,7 +101,7 @@ else:
         st.experimental_rerun()
 
 # Display Data and Analysis
-if st.session_state.data is not None:
+if st.session_state.data is not None and not st.session_state.data.empty:
     # Normalize column names
     st.session_state.data.columns = st.session_state.data.columns.str.lower()
     
@@ -109,7 +110,7 @@ if st.session_state.data is not None:
         st.dataframe(st.session_state.data)
     
     # Yahoo Finance Messages
-    if data_source == "Yahoo Finance" and st.session_state.data is not None:
+    if data_source == "Yahoo Finance":
         try:
             import yfinance as yf
             ticker = yf.Ticker(st.session_state.symbol)
@@ -151,7 +152,7 @@ if st.session_state.data is not None:
             st.error(f"Error in prediction: {str(e)}")
 
 # Export Data
-if st.session_state.data is not None:
+if st.session_state.data is not None and not st.session_state.data.empty:
     st.header("Export Data")
     export_format = st.selectbox("Select Export Format", ["CSV", "XLSX"])
     export_data = pl_data if st.session_state.data is not None else st.session_state.data
