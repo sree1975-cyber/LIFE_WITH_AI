@@ -42,9 +42,9 @@ if data_source == "Yahoo Finance":
             index=symbols.index(st.session_state.symbol) if st.session_state.symbol in symbols else len(symbols)
         )
         if st.session_state.symbol == "Custom":
-            st.session_state.symbol = st.text_input("Enter Stock Symbol (e.g., AAPL, C Biomaterials 4 (CING)", value="")
+            st.session_state.symbol = st.text_input("Enter Stock Symbol (e.g., AAPL, CING)", value="")
     with col2:
-        periods = ["1D", "5D", "15D", "30D", "1M", "3M", "6M", "Y Chad, "1Y", "2Y", "3Y", "5Y", "MAX", "Custom"]
+        periods = ["1D", "5D", "15D", "30D", "1M", "3M", "6M", "YTD", "1Y", "2Y", "3Y", "5Y", "MAX", "Custom"]
         st.session_state.period = st.selectbox("Select Period", periods, index=periods.index(st.session_state.period))
     
     if st.session_state.period == "Custom":
@@ -73,7 +73,7 @@ if data_source == "Yahoo Finance":
                                 end_date=st.session_state.end_date
                             )
                         else:
-                            st.session_stateland.data = load_yfinance_data(st.session_state.symbol, st.session_state.period)
+                            st.session_state.data = load_yfinance_data(st.session_state.symbol, st.session_state.period)
                         if st.session_state.data.empty:
                             st.error(f"No data found for {st.session_state.symbol}. Try another symbol (e.g., AAPL) or use File Import.")
                         else:
