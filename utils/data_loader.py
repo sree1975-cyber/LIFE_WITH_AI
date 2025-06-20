@@ -31,7 +31,23 @@ def load_yfinance_data(symbol, period, start_date=None, end_date=None):
             data = yf.download(symbol, period=period_map[period], interval="1d")
         
         if data.empty:
-            raise ValueError(f"No data found for {symbol} in the specified period")
+            # Try fetching max period to check available range
+            try:
+                max_data = yf.download(symbol, period="max", interval="1d")
+                if not max_data.empty:
+                    start = max_data.index[0].date()
+                    end = max_data.index[-1].date()
+                    raise ValueError(
+                        f"No data found for {symbol} in the specified period. "
+                        f"Data is available from {start} to {end}. "
+                        f"Try a different period (e.g., 1M, YTD) or use File Import."
+                    )
+            except:
+                pass
+            raise ValueError(
+                f"No data found for {symbol} in the specified period. "
+                f"Try a different period (e.g., 1M, YTD), another symbol (e.g., AAPL), or use File Import."
+            )
         
         # Normalize column names
         data.columns = [col.lower() for col in data.columns]
