@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import re
 from utils.data_loader import load_file_data, load_yfinance_data
 from utils.calculations import calculate_pl
 from utils.visualizations import create_monthly_pl_table, create_candlestick_chart
@@ -49,7 +50,12 @@ if data_source == "Yahoo Finance":
     col5, col6 = st.columns(2)
     with col5:
         if st.button("Submit"):
-            if st.session_state.symbol:
+            # Validate symbol
+            if not st.session_state.symbol or not re.match(r'^[A-Z0-9.-]+$', st.session_state.symbol):
+                st.error("Please enter a valid stock symbol (e.g., AAPL, MSFT)")
+            elif st.session_state.period == "Custom" and (st.session_state.start_date >= st.session_state.end_date or st.session_state.end_date > pd.to_datetime("today")):
+                st.error("Start date must be before end date, and end date cannot be in the future")
+            else:
                 try:
                     if st.session_state.period == "Custom":
                         st.session_state.data = load_yfinance_data(
@@ -61,8 +67,10 @@ if data_source == "Yahoo Finance":
                     else:
                         st.session_state.data = load_yfinance_data(st.session_state.symbol, st.session_state.period)
                     st.success(f"Data loaded for {st.session_state.symbol}")
-                except Exception as e:
+                except ValueError as e:
                     st.error(f"Error loading data: {str(e)}")
+                except Exception as e:
+                    st.error(f"Unexpected error: {str(e)}. Please check your internet connection or try a different symbol.")
     with col6:
         if st.button("Clear"):
             st.session_state.data = None
@@ -81,8 +89,10 @@ else:
             try:
                 st.session_state.data = load_file_data(uploaded_file)
                 st.success("File data loaded successfully")
-            except Exception as e:
+            except ValueError as e:
                 st.error(f"Error processing file: {str(e)}")
+            except Exception as e:
+                st.error(f"Unexpected error processing file: {str(e)}")
     if st.button("Clear"):
         st.session_state.data = None
         st.experimental_rerun()
