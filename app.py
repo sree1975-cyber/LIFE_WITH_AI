@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
 import re
-from datetime import datetime, timedelta
-from utils.data_loader import load_yfinance_data, load_file_data
+from utils.data_loader import load_file_data, load_yfinance_data
 from utils.calculations import calculate_pl
 from utils.visualizations import create_monthly_pl_table, create_candlestick_chart
 from utils.indicators import calculate_indicators
@@ -18,75 +17,13 @@ if 'data' not in st.session_state:
 if 'symbol' not in st.session_state:
     st.session_state.symbol = "AAPL"
 if 'period' not in st.session_state:
-    st.session_state.period = "1y"
-if 'processed_data' not in st.session_state:
-    st.session_state.processed_data = None
-
-# Function to display data info
-def display_data_info(data, symbol):
-    if not data.empty:
-        st.info(f"Data available for {symbol} from {data.index[0].date()} to {data.index[-1].date()}")
-
-# Function for Yahoo Finance interface
-def display_yfinance_interface():
-    st.subheader("YFinance Data Retrieval")
-    
-    # Stock symbol input
-    symbol = st.text_input(
-        "Enter Stock Symbol",
-        value=st.session_state.symbol,
-        placeholder="e.g., AAPL, MSFT, GOOGL"
-    ).upper()
-    
-    # Period selection
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        period_type = st.selectbox(
-            "Period Type",
-            ["Predefined", "Custom Range"]
-        )
-    
-    with col2:
-        if period_type == "Predefined":
-            period = st.selectbox(
-                "Select Period",
-                ["real-time", "1d", "5d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "3y", "5y", "max"],
-                index=7  # Default to 1y
-            )
-        else:
-            st.write("Custom Date Range")
-    
-    if period_type == "Custom Range":
-        col3, col4 = st.columns(2)
-        with col3:
-            start_date = st.date_input("Start Date", datetime.now() - timedelta(days=365))
-        with col4:
-            end_date = st.date_input("End Date", datetime.now())
-        period = "Custom"
-    else:
-        start_date = None
-        end_date = None
-    
-    if st.button("📥 Download Data", type="primary"):
-        if symbol and re.match(r'^[A-Z0-9.-]+$', symbol):
-            with st.spinner("Downloading data from YFinance..."):
-                try:
-                    data = load_yfinance_data(symbol, period, start_date, end_date)
-                    if data is not None and not data.empty:
-                        st.session_state.data = data
-                        st.session_state.symbol = symbol
-                        st.session_state.period = period if period != "Custom" else f"{start_date} to {end_date}"
-                        st.session_state.processed_data = calculate_pl(data)  # Assuming calculate_pl is equivalent to process_stock_data
-                        st.success(f"✅ Data downloaded successfully for {symbol}")
-                        display_data_info(data, symbol)
-                        st.rerun()
-                    else:
-                        st.error(f"❌ No data found for {symbol} in period {period}. Try real-time, 1mo, ytd, or a shorter Custom period.")
-                except Exception as e:
-                    st.error(f"❌ Error downloading data: {str(e)}. Try real-time, 1mo, ytd, or check your network connection.")
-        else:
-            st.warning("⚠️ Please enter a valid stock symbol (e.g., AAPL, CING)")
+    st.session_state.period = "1Y"
+if 'start_date' not in st.session_state:
+    st.session_state.start_date = None
+if 'end_date' not in st.session_state:
+    st.session_state.end_date = None
+if 'is_custom_symbol' not in st.session_state:
+    st.session_state.is_custom_symbol = False
 
 # Sidebar for data source selection
 st.sidebar.header("Data Source")
@@ -97,7 +34,97 @@ st.title("Stock Market Analysis Dashboard")
 
 # Yahoo Finance UI
 if data_source == "Yahoo Finance":
-    display_yfinance_interface()
+    st.header("Yahoo Finance Data")
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        symbols = ["AAPL", "TSLA", "MSFT", "GOOGL", "AMZN", "CING"]
+        symbol_selection = st.selectbox(
+            "Select or Enter Symbol",
+            options=symbols + ["Custom"],
+            index=symbols.index(st.session_state.symbol) if st.session_state.symbol in symbols else len(symbols),
+            key="symbol_select"
+        )
+        
+        if symbol_selection == "Custom":
+            st.session_state.is_custom_symbol = True
+            st.session_state.symbol = st.text_input(
+                "Enter Stock Symbol (e.g., AAPL, CING)",
+                value=st.session_state.symbol if st.session_state.is_custom_symbol else "",
+                key="custom_symbol"
+            )
+        else:
+            st.session_state.is_custom_symbol = False
+            st.session_state.symbol = symbol_selection
+        
+        if st.session_state.symbol == "CING":
+            st.info("CING data is available from December 2021. Use periods like 1M or Custom (post-2021).")
+    
+    with col2:
+        periods = ["1D", "5D", "15D", "30D", "1M", "3M", "6M", "YTD", "1Y", "2Y", "3Y", "5Y", "MAX", "Custom"]
+        st.session_state.period = st.selectbox("Select Period", periods, 
+                                               index=periods.index(st.session_state.period),
+                                               key="period_select")
+    
+    if st.session_state.period == "Custom":
+        col3, col4 = st.columns(2)
+        with col3:
+            st.session_state.start_date = st.date_input(
+                "Start Date", 
+                value=pd.to_datetime("today") - pd.Timedelta(days=365),
+                key="start_date"
+            )
+        with col4:
+            st.session_state.end_date = st.date_input(
+                "End Date", 
+                value=pd.to_datetime("today"),
+                key="end_date"
+            )
+    
+    col5, col6 = st.columns([2, 1])
+    with col5:
+        if st.button("Submit", key="submit"):
+            if not st.session_state.symbol or not re.match(r'^[A-Z0-9.-]+$', st.session_state.symbol):
+                st.error("Please enter a valid stock symbol (e.g., AAPL, CING)")
+            elif st.session_state.period == "Custom" and (
+                pd.Timestamp(st.session_state.start_date) >= pd.Timestamp(st.session_state.end_date) or 
+                pd.Timestamp(st.session_state.end_date) > pd.Timestamp.now()
+            ):
+                st.error("Start date must be before end date, and end date cannot be in the future")
+            else:
+                with st.spinner("Loading data from Yahoo Finance..."):
+                    try:
+                        if st.session_state.period == "Custom":
+                            st.session_state.data = load_yfinance_data(
+                                st.session_state.symbol, 
+                                st.session_state.period, 
+                                start_date=st.session_state.start_date, 
+                                end_date=st.session_state.end_date
+                            )
+                        else:
+                            st.session_state.data = load_yfinance_data(
+                                st.session_state.symbol, 
+                                st.session_state.period
+                            )
+                        if st.session_state.data.empty:
+                            st.error(
+                                f"No data found for {st.session_state.symbol} in period {st.session_state.period}. "
+                                f"Try 1M, Custom (post-2021 for CING), another symbol (e.g., AAPL), or File Import."
+                            )
+                        else:
+                            st.success(f"Data loaded for {st.session_state.symbol}")
+                    except Exception as e:
+                        st.error(f"Error loading data: {str(e)}")
+    
+    with col6:
+        if st.button("Clear", key="clear"):
+            st.session_state.data = None
+            st.session_state.symbol = "AAPL"
+            st.session_state.period = "1Y"
+            st.session_state.start_date = None
+            st.session_state.end_date = None
+            st.session_state.is_custom_symbol = False
+            st.experimental_rerun()
 
 # File Import UI
 else:
@@ -120,12 +147,7 @@ else:
         if uploaded_file:
             try:
                 st.session_state.data = load_file_data(uploaded_file)
-                st.session_state.processed_data = calculate_pl(st.session_state.data)
-                st.session_state.symbol = uploaded_file.name.split('.')[0]
-                st.session_state.period = "Uploaded File"
                 st.success("File data loaded successfully")
-                display_data_info(st.session_state.data, st.session_state.symbol)
-                st.rerun()
             except ValueError as e:
                 st.error(f"Error processing file: {str(e)}")
             except Exception as e:
@@ -133,10 +155,7 @@ else:
     
     if st.button("Clear", key="clear_file"):
         st.session_state.data = None
-        st.session_state.processed_data = None
-        st.session_state.symbol = "AAPL"
-        st.session_state.period = "1y"
-        st.rerun()
+        st.experimental_rerun()
 
 # Display Data and Analysis
 if st.session_state.data is not None and not st.session_state.data.empty:
@@ -146,9 +165,17 @@ if st.session_state.data is not None and not st.session_state.data.empty:
         st.dataframe(st.session_state.data)
     
     if data_source == "Yahoo Finance":
-        st.info(f"Selected period: {st.session_state.period}")
-    
-    pl_data = st.session_state.processed_data or calculate_pl(st.session_state.data)
+        try:
+            import yfinance as yf
+            ticker = yf.Ticker(st.session_state.symbol)
+            hist_data = ticker.history(period="max")
+            if not hist_data.empty:
+                st.info(f"Total historical data available from {hist_data.index[0].date()} to {hist_data.index[-1].date()}")
+            st.info(f"Selected period data from {st.session_state.data.index[0].date()} to {st.session_state.data.index[-1].date()}")
+        except:
+            st.warning("Unable to fetch historical data range. Data may still be valid.")
+
+    pl_data = calculate_pl(st.session_state.data)
     pl_data = calculate_indicators(pl_data)
     pl_data = apply_strategies(pl_data)
     
@@ -177,7 +204,7 @@ if st.session_state.data is not None and not st.session_state.data.empty:
 if st.session_state.data is not None and not st.session_state.data.empty:
     st.header("Export Data")
     export_format = st.selectbox("Select Export Format", ["CSV", "XLSX"], key="export_format")
-    export_data = st.session_state.processed_data if st.session_state.processed_data is not None else st.session_state.data
+    export_data = pl_data if 'pl_data' in locals() else st.session_state.data
     if export_format == "CSV":
         csv = export_data.to_csv(index=True)
         st.download_button(
