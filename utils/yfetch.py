@@ -10,19 +10,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 @st.cache_data(ttl=60)
-def fetch_yfinance_data(symbol, start_date=None, end_date=None, period=None, interval="1d", retries=5, delay=5):
+def fetch_yfinance_data(symbol, start_date=None, end_date=None, period=None, interval="1d", retries=3, delay=2):
     """Fetch stock data from yfinance for the given symbol and period or date range."""
     logger.info(f"Fetching data for {symbol}, period: {period}, start: {start_date}, end: {end_date}, interval: {interval}")
-    
-    # Validate interval based on period
-    if period in ["1D", "5D"] and interval not in ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "1d"]:
-        interval = "1d"
-        logger.info(f"Adjusted interval to '1d' for period {period}")
     
     # Map periods to days for date range calculation
     if period and not (start_date and end_date):
         end_date = pd.to_datetime('today')
         period_map = {
+            "real-time": 1,  # 1-day period with 1m interval
             "1D": 1,
             "5D": 5,
             "15D": 15,
@@ -37,7 +33,7 @@ def fetch_yfinance_data(symbol, start_date=None, end_date=None, period=None, int
             "5Y": 1825,
             "MAX": None
         }
-        if period not in period_map and period != "real-time":
+        if period not in period_map:
             raise ValueError(f"Invalid period: {period}")
         if period == "MAX":
             start_date = None
