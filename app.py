@@ -36,12 +36,10 @@ class DataLoader:
             logger.info(f"Downloading yfinance data for {symbol}, period: {period}, start: {start_date}, end: {end_date}")
             for attempt in range(1, 4):  # Retry up to 3 times
                 try:
-                    # Use custom headers to mimic browser request
-                    yf.pdr_override()  # Ensure pandas_datareader compatibility
                     if period:
-                        data = yf.download(symbol, period=period, interval="1d", headers={'User-Agent': 'Mozilla/5.0'})
+                        data = yf.download(symbol, period=period, interval="1d")
                     else:
-                        data = yf.download(symbol, start=start_date, end=end_date, interval="1d", headers={'User-Agent': 'Mozilla/5.0'})
+                        data = yf.download(symbol, start=start_date, end=end_date, interval="1d")
                     if data is None or data.empty:
                         logger.warning(f"Attempt {attempt}: Empty data for {symbol}")
                         if attempt < 3:
