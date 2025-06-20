@@ -43,6 +43,8 @@ if data_source == "Yahoo Finance":
         )
         if st.session_state.symbol == "Custom":
             st.session_state.symbol = st.text_input("Enter Stock Symbol (e.g., AAPL, CING)", value="")
+        if st.session_state.symbol == "CING":
+            st.info("CING data is available from December 2021. Use periods like 1M, YTD, or Custom (post-2021).")
     with col2:
         periods = ["1D", "5D", "15D", "30D", "1M", "3M", "6M", "YTD", "1Y", "2Y", "3Y", "5Y", "MAX", "Custom"]
         st.session_state.period = st.selectbox("Select Period", periods, index=periods.index(st.session_state.period))
@@ -60,7 +62,7 @@ if data_source == "Yahoo Finance":
             # Validate symbol
             if not st.session_state.symbol or not re.match(r'^[A-Z0-9.-]+$', st.session_state.symbol):
                 st.error("Please enter a valid stock symbol (e.g., AAPL, CING)")
-            elif st.session_state.period == "Custom" and (st.session_state.start_date >= st.session_state.end_date or st.session_state.end_date > pd.to_datetime("today")):
+            elif st.session_state.period == "Custom" and (pd.Timestamp(st.session_state.start_date) >= pd.Timestamp(st.session_state.end_date) or pd.Timestamp(st.session_state.end_date) > pd.Timestamp.now()):
                 st.error("Start date must be before end date, and end date cannot be in the future")
             else:
                 with st.spinner("Loading data from Yahoo Finance..."):
@@ -75,7 +77,7 @@ if data_source == "Yahoo Finance":
                         else:
                             st.session_state.data = load_yfinance_data(st.session_state.symbol, st.session_state.period)
                         if st.session_state.data.empty:
-                            st.error(f"No data found for {st.session_state.symbol}. Try another symbol (e.g., AAPL) or use File Import.")
+                            st.error(f"No data found for {st.session_state.symbol} in period {st.session_state.period}. Try another period (e.g., 1M, YTD), another symbol (e.g., AAPL), or use File Import.")
                         else:
                             st.success(f"Data loaded for {st.session_state.symbol}")
                     except Exception as e:
