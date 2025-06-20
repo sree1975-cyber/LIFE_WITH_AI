@@ -2,6 +2,7 @@ import pandas as pd
 import yfinance as yf
 import logging
 import time
+import streamlit as st
 from datetime import datetime, timedelta
 
 # Configure logging
