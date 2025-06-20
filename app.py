@@ -4,6 +4,7 @@ import re
 from datetime import datetime, timedelta
 import yfinance as yf
 import logging
+import time
 from utils.data_loader import load_file_data
 from utils.calculations import calculate_pl
 from utils.visualizations import create_monthly_pl_table, create_candlestick_chart
@@ -119,42 +120,52 @@ if data_source == "Yahoo Finance":
                 st.error("❌ Please enter a valid stock symbol (e.g., AAPL, CING)")
             else:
                 with st.spinner("Downloading data from YFinance..."):
-                    try:
-                        logger.info(f"Downloading data for {st.session_state.symbol}, period: {period if period else 'Custom'}, start: {start_date}, end: {end_date}")
-                        if period_type == "Custom Range":
-                            data = yf.download(
-                                st.session_state.symbol,
-                                start=start_date,
-                                end=end_date,
-                                interval="1d"
-                            )
-                            st.session_state.start_date = start_date
-                            st.session_state.end_date = end_date
-                            st.session_state.period = f"{start_date} to {end_date}"
-                        else:
-                            data = yf.download(
-                                st.session_state.symbol,
-                                period=period,
-                                interval="1d"
-                            )
-                            st.session_state.period = period
-                        
-                        if data is None or data.empty:
-                            logger.warning(f"No data returned for {st.session_state.symbol}, period: {st.session_state.period}")
+                    for attempt in range(1, 4):  # Retry up to 3 times
+                        try:
+                            logger.info(f"Attempt {attempt}: Downloading data for {st.session_state.symbol}, period: {period if period else 'Custom'}, start: {start_date}, end: {end_date}")
+                            if period_type == "Custom Range":
+                                data = yf.download(
+                                    st.session_state.symbol,
+                                    start=start_date,
+                                    end=end_date,
+                                    interval="1d"
+                                )
+                                st.session_state.start_date = start_date
+                                st.session_state.end_date = end_date
+                                st.session_state.period = f"{start_date} to {end_date}"
+                            else:
+                                data = yf.download(
+                                    st.session_state.symbol,
+                                    period=period,
+                                    interval="1d"
+                                )
+                                st.session_state.period = period
+                            
+                            if data is None or data.empty:
+                                logger.warning(f"No data returned for {st.session_state.symbol}, period: {st.session_state.period}")
+                                if attempt < 3:
+                                    time.sleep(5 * attempt)  # Exponential backoff
+                                    continue
+                                suggestions = "1mo, Custom (post-2021)" if st.session_state.symbol == "CING" else "1mo, ytd, Custom"
+                                st.error(f"❌ No data found for {st.session_state.symbol} in period {st.session_state.period}. "
+                                         f"Try a period like {suggestions}, another symbol (e.g., AAPL), or File Import.")
+                                break
+                            else:
+                                if isinstance(data.columns, pd.MultiIndex):
+                                    data.columns = data.columns.get_level_values(0)
+                                data.columns = [col.lower() for col in data.columns]
+                                st.session_state.data = data
+                                logger.info(f"Successfully downloaded data for {st.session_state.symbol}")
+                                st.success(f"✅ Data downloaded successfully for {st.session_state.symbol}")
+                                break
+                        except Exception as e:
+                            logger.error(f"Attempt {attempt} failed for {st.session_state.symbol}: {str(e)}")
+                            if attempt < 3:
+                                time.sleep(5 * attempt)
+                                continue
                             suggestions = "1mo, Custom (post-2021)" if st.session_state.symbol == "CING" else "1mo, ytd, Custom"
-                            st.error(f"❌ No data found for {st.session_state.symbol} in period {st.session_state.period}. "
-                                     f"Try a period like {suggestions}, another symbol (e.g., AAPL), or File Import.")
-                        else:
-                            if isinstance(data.columns, pd.MultiIndex):
-                                data.columns = data.columns.get_level_values(0)
-                            data.columns = [col.lower() for col in data.columns]
-                            st.session_state.data = data
-                            logger.info(f"Successfully downloaded data for {st.session_state.symbol}")
-                            st.success(f"✅ Data downloaded successfully for {st.session_state.symbol}")
-                    except Exception as e:
-                        logger.error(f"Error downloading data for {st.session_state.symbol}: {str(e)}")
-                        suggestions = "1mo, Custom (post-2021)" if st.session_state.symbol == "CING" else "1mo, ytd, Custom"
-                        st.error(f"❌ Error downloading data: {str(e)}. Try a period like {suggestions}, another symbol (e.g., AAPL), or File Import.")
+                            st.error(f"❌ Error downloading data: {str(e)}. Try a period like {suggestions}, another symbol (e.g., AAPL), or File Import.")
+                            break
     
     with col6:
         if st.button("🔄 Clear", key="clear", type="secondary"):
@@ -185,7 +196,7 @@ else:
     csv = sample_data.to_csv()
     st.download_button("Download Sample CSV", data=csv, file_name="sample_stock_data.csv")
     
-    if st.button("Process", key="process_file", type="primary"):
+    if st.button("📤 Process", key="process_file", type="primary"):
         try:
             with st.spinner("Processing uploaded file..."):
                 st.session_state.data = load_file_data(uploaded_file)
