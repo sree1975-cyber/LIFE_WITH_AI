@@ -13,7 +13,7 @@ def fetch_yfinance_data(symbol, start_date=None, end_date=None, period=None, ret
     logger.info(f"Fetching data for {symbol}, period: {period}, start: {start_date}, end: {end_date}")
 
     now = datetime.now()
-    
+
     # Map periods to date ranges
     if period and not (start_date and end_date):
         period_map = {
@@ -35,16 +35,17 @@ def fetch_yfinance_data(symbol, start_date=None, end_date=None, period=None, ret
             raise ValueError(f"Invalid period: {period}")
         start_date, end_date = period_map[period]
 
-    # Ensure end_date is not in the future (and not today, unless after market close)
+    # === Correction starts here ===
+    # Ensure end_date is not today or in the future (Yahoo may not have today's data yet)
     if end_date is not None:
-        # If today, use yesterday (because today's data may not be available yet)
         if end_date.date() >= now.date():
             end_date = now - timedelta(days=1)
-            logger.info(f"Adjusted end_date to {end_date.date()} to avoid future/today's incomplete data.")
+            logger.info(f"Adjusted end_date to {end_date.date()} to avoid requesting future or incomplete data.")
 
     # Ensure start_date is before end_date
     if start_date is not None and end_date is not None and start_date >= end_date:
         raise ValueError(f"start_date {start_date.date()} must be before end_date {end_date.date()}")
+    # === Correction ends here ===
 
     for attempt in range(1, retries + 1):
         try:
