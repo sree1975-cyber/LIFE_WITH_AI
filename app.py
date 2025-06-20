@@ -179,7 +179,7 @@ else:
         "open": [2.0, 1.95],
         "high": [2.1, 2.0],
         "low": [1.9, 1.9],
-        "close": [2.05, 5.2],
+        "close": [2.05, 2.0],
         "volume": [100000, 99999]
     }).set_index("date")
     csv = sample_data.to_csv()
@@ -189,12 +189,12 @@ else:
         try:
             with st.spinner("Processing uploaded file..."):
                 st.session_state.data = load_file_data(uploaded_file)
-                st.success("✅ File uploaded successfully")
+                st.success("✅ File processed successfully")
         except ValueError as e:
-            logger.error(f"Error downloading data: {str(e)}")
+            logger.error(f"Error processing file: {str(e)}")
             st.error(f"❌ Error processing file: {str(e)}")
         except Exception as e:
-            logger.error(f"Unexpected error downloading data: {str(e)}")
+            logger.error(f"Unexpected error processing file: {str(e)}")
             st.error(f"❌ Unexpected error processing file: {str(e)}")
     
     if st.button("🔄 Clear", key="clear_file", type="secondary"):
@@ -210,39 +210,39 @@ if st.session_state.data is not None and not st.session_state.data.empty:
     
     if data_source == "Yahoo Finance":
         try:
-            with_ticker = yf.Ticker(st.session_state.symbol)
-            historical_data = with_ticker.history(period="1mo")
-            if not historical_data.empty:
-                st.info(f"Data available from {historical_data.index[0].date()} to {historical_data.index[-1].date()}")
-            st.info(f"Period selected ranging from {st.session_state.data.index[0].date()} to {st.session_state.data.index[-1]].date()}")
+            ticker = yf.Ticker(st.session_state.symbol)
+            hist_data = ticker.history(period="1mo")
+            if not hist_data.empty:
+                st.info(f"Data available from {hist_data.index[0].date()} to {hist_data.index[-1].date()}")
+            st.info(f"Period selected ranging from {st.session_state.data.index[0].date()} to {st.session_state.data.index[-1].date()}")
         except:
-            st.warning("⚠️ Unable to pull historical data ranges. Data is likely still valid.")
+            st.warning("⚠️ Unable to fetch historical data range. Data may still be valid.")
     
     pl_data = calculate_pl(st.session_state.data)
     pl_data = calculate_indicators(pl_data)
     pl_data = apply_strategies(pl_data)
     
-    with st.expander("Profit & Loss Analysis"):
+    with st.expander("💰 Profit and Loss Analysis"):
         st.dataframe(pl_data)
     
     monthly_pl = create_monthly_pl_table(pl_data, st.session_state.period)
-    with st.expander("Monthly P&L"):
+    with st.expander("📅 Monthly P&L"):
         st.plotly_chart(monthly_pl, use_container_width=True)
     
     candlestick_chart = create_candlestick_chart(pl_data)
-    with st.expander("Candlestick Chart"):
+    with st.expander("📈 Candlestick Chart"):
         st.plotly_chart(candlestick_chart, use_container_width=True)
     
-    with st.expander("Price Predictions"):
-        horizon = st.selectbox("Prediction Horizon", ["1 Day", "1 Week", "1 Month"], key="horizon")
-        horizon_map = {"1 Day": 1", "2 Week": 7, "1 Month": 30}
+    with st.expander("🔮 Price Prediction"):
+        horizon = st.selectbox("Prediction Horizon", ["1 Day", "5 Days", "1 Month"], key="horizon")
+        horizon_map = {"1 Day": 1, "5 Days": 5, "1 Month": 30}
         try:
             pred_df, pred_chart = predict_prices(pl_data, horizon_map[horizon])
             st.dataframe(pred_df)
             st.plotly_chart(pred_chart, use_container_width=True)
         except Exception as e:
             logger.error(f"Error predicting prices: {str(e)}")
-            st.error(f"❌ Prediction error:: {str(e)}")
+            st.error(f"❌ Prediction error: {str(e)}")
 
 # Data Export
 if st.session_state.data is not None and not st.session_state.data.empty:
