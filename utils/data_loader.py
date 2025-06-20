@@ -3,6 +3,7 @@ import logging
 import streamlit as st
 from datetime import datetime
 from utils.yfetch import fetch_yfinance_data
+import yfinance as yf
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -13,6 +14,16 @@ def load_yfinance_data(symbol, period, start_date=None, end_date=None):
     """Load stock data from yfinance for the given symbol and period."""
     try:
         logger.info(f"Loading data for {symbol}, period: {period}")
+        
+        # Validate symbol
+        ticker = yf.Ticker(symbol)
+        try:
+            info = ticker.info
+            if not info:
+                raise ValueError(f"Symbol {symbol} not found or no metadata available")
+        except Exception as e:
+            logger.warning(f"Failed to fetch metadata for {symbol}: {str(e)}")
+            raise ValueError(f"Invalid symbol {symbol} or no metadata available: {str(e)}")
         
         if period == "Custom":
             if start_date >= end_date:
@@ -29,7 +40,7 @@ def load_yfinance_data(symbol, period, start_date=None, end_date=None):
                 if not max_data.empty:
                     start = max_data.index[0].date()
                     end = max_data.index[-1].date()
-                    suggestions = "1M, Custom (post-2021)" if symbol == "CING" else "1M, YTD, Custom"
+                    suggestions = "1M, YTD, Custom (post-2021)" if symbol == "CING" else "1M, YTD, Custom"
                     raise ValueError(
                         f"No data found for {symbol} in period {period}. "
                         f"Data is available from {start} to {end}. "
@@ -37,7 +48,7 @@ def load_yfinance_data(symbol, period, start_date=None, end_date=None):
                     )
             except Exception as e:
                 logger.warning(f"Failed to fetch max data for {symbol}: {str(e)}")
-            suggestions = "1M, Custom (post-2021)" if symbol == "CING" else "1M, YTD, Custom"
+            suggestions = "1M, YTD, Custom (post-2021)" if symbol == "CING" else "1M, YTD, Custom"
             raise ValueError(
                 f"No data found for {symbol} in period {period}. "
                 f"Try a period like {suggestions}, another symbol (e.g., AAPL), or use File Import."
