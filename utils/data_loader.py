@@ -25,32 +25,39 @@ def load_yfinance_data(symbol, period, start_date=None, end_date=None, retries=3
                     raise ValueError("End date cannot be in the future")
                 data = ticker.history(start=start_date, end=end_date, interval="1d")
             else:
-                period_map = {
-                    "1D": "1d", "5D": "5d", "15D": "15d", "30D": "1mo",
-                    "1M": "1mo", "3M": "3mo", "6M": "6mo", "YTD": "ytd",
-                    "1Y": "1y", "2Y": "2y", "3Y": "3y", "5Y": "5y", "MAX": "max"
-                }
-                if period not in period_map:
-                    raise ValueError(f"Invalid period: {period}")
-                data = ticker.history(period=period_map[period], interval="1d")
+                # Handle YTD explicitly with date range
+                if period == "YTD":
+                    start = datetime(datetime.now().year, 1, 1)
+                    end = datetime.now()
+                    data = ticker.history(start=start, end=end, interval="1d")
+                else:
+                    period_map = {
+                        "1D": "1d", "5D": "5d", "15D": "15d", "30D": "1mo",
+                        "1M": "1mo", "3M": "3mo", "6M": "6mo", "YTD": "ytd",
+                        "1Y": "1y", "2Y": "2y", "3Y": "3y", "5Y": "5y", "MAX": "max"
+                    }
+                    if period not in period_map:
+                        raise ValueError(f"Invalid period: {period}")
+                    data = ticker.history(period=period_map[period], interval="1d")
             
             if data.empty:
-                # Try fetching max period to check available range
+                # Check available data range
                 try:
                     max_data = ticker.history(period="max", interval="1d")
                     if not max_data.empty:
                         start = max_data.index[0].date()
                         end = max_data.index[-1].date()
+                        suggestions = "1M, Custom (post-2021)" if symbol == "CING" else "1M, YTD, Custom"
                         raise ValueError(
                             f"No data found for {symbol} in period {period}. "
                             f"Data is available from {start} to {end}. "
-                            f"Try a period like 1M, YTD, or Custom (post-{start})."
+                            f"Try a period like {suggestions}."
                         )
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Failed to fetch max data for {symbol}: {str(e)}")
                 raise ValueError(
                     f"No data found for {symbol} in period {period}. "
-                    f"Try a period like 1M, YTD, another symbol (e.g., AAPL), or use File Import."
+                    f"Try a period like 1M or Custom (post-2021 for CING), another symbol (e.g., AAPL), or use File Import."
                 )
             
             # Select required columns
@@ -64,9 +71,10 @@ def load_yfinance_data(symbol, period, start_date=None, end_date=None, retries=3
         except Exception as e:
             logger.warning(f"Attempt {attempt} failed for {symbol}: {str(e)}")
             if attempt == retries:
+                suggestions = "1M, Custom (post-2021)" if symbol == "CING" else "1M, YTD, Custom"
                 raise ValueError(
                     f"Failed to load data for {symbol} in period {period} after {retries} attempts: {str(e)}. "
-                    f"Try a period like 1M, YTD, another symbol (e.g., AAPL), or use File Import."
+                    f"Try a period like {suggestions}, another symbol (e.g., AAPL), or use File Import."
                 )
             time.sleep(delay * (2 ** (attempt - 1)))  # Exponential backoff: 2s, 4s, 8s
     
