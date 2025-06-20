@@ -46,82 +46,68 @@ class DataLoader:
         self.session.mount('https://', adapter)
         
     def load_yfinance_data(self, symbol, period, start_date, end_date):
-        max_retries = 3
-        backoff_factor = 2
-        
-        for attempt in range(1, max_retries + 1):
-            try:
-                logger.info(f"Attempt {attempt}: Downloading data for {symbol}")
-                
-                # Use the session we configured
-                yf.pdr_override()
-                
-                if period:
-                    data = yf.download(
-                        tickers=symbol,
-                        period=period,
-                        interval="1d",
-                        progress=False
-                    )
-                else:
-                    data = yf.download(
-                        tickers=symbol,
-                        start=start_date,
-                        end=end_date,
-                        interval="1d",
-                        progress=False
-                    )
-                
-                if data is None or data.empty:
-                    logger.warning(f"Attempt {attempt}: Empty data for {symbol}")
-                    if attempt < max_retries:
-                        sleep_time = backoff_factor ** attempt
-                        time.sleep(sleep_time)
-                        continue
-                    return None
-                
-                # Clean up column names
-                if isinstance(data.columns, pd.MultiIndex):
-                    data.columns = data.columns.get_level_values(0)
-                data.columns = [col.lower() for col in data.columns]
-                
-                logger.info(f"Successfully downloaded data for {symbol}")
-                return data
-                
-            except Exception as e:
-                logger.error(f"Attempt {attempt} failed for {symbol}: {str(e)}")
+    max_retries = 3
+    backoff_factor = 2
+    
+    for attempt in range(1, max_retries + 1):
+        try:
+            logger.info(f"Attempt {attempt}: Downloading data for {symbol}")
+            
+            # Try with different parameters if first attempt fails
+            if attempt > 1:
+                if period == "1y":
+                    period = "6mo"  # Try a shorter period
+                elif period == "6mo":
+                    period = "3mo"
+                elif period == "3mo":
+                    period = "1mo"
+            
+            if period:
+                data = yf.download(
+                    tickers=symbol,
+                    period=period,
+                    interval="1d",
+                    progress=False,
+                    group_by='ticker',
+                    threads=True
+                )
+            else:
+                data = yf.download(
+                    tickers=symbol,
+                    start=start_date,
+                    end=end_date,
+                    interval="1d",
+                    progress=False,
+                    group_by='ticker',
+                    threads=True
+                )
+            
+            if data is None or data.empty:
+                logger.warning(f"Attempt {attempt}: Empty data for {symbol}")
                 if attempt < max_retries:
                     sleep_time = backoff_factor ** attempt
                     time.sleep(sleep_time)
                     continue
-                logger.error(f"All attempts failed for {symbol}")
                 return None
-    
-    def load_file_data(self, uploaded_file):
-        return load_file_data(uploaded_file)
+            
+            # Clean up column names
+            if isinstance(data.columns, pd.MultiIndex):
+                data.columns = data.columns.get_level_values(0)
+            data.columns = [col.lower() for col in data.columns]
+            
+            logger.info(f"Successfully downloaded data for {symbol}")
+            return data
+            
+        except Exception as e:
+            logger.error(f"Attempt {attempt} failed for {symbol}: {str(e)}")
+            if attempt < max_retries:
+                sleep_time = backoff_factor ** attempt
+                time.sleep(sleep_time)
+                continue
+            logger.error(f"All attempts failed for {symbol}")
+            return None
 
-# Instantiate DataLoader
-data_loader = DataLoader()
-
-# Sidebar for data source selection
-st.sidebar.header("Data Source")
-data_source = st.sidebar.radio("Select Data Source", ["Yahoo Finance", "File Import"])
-
-# Main UI
-st.title("Stock Market Analysis Dashboard")
-
-def display_data_info(data, source):
-    """Display information about the loaded data"""
-    st.info(f"""
-    📋 **Data Information for {source}:**
-    - Total Records: {len(data):,}
-    - Date Range: {data.index.min().strftime('%Y-%m-%d')} to {data.index.max().strftime('%Y-%m-%d')}
-    - Columns: {', '.join(data.columns.tolist())}
-    """)
-
-def process_stock_data(data):
-    """Placeholder for data processing"""
-    return data
+# Then in your display_yfinance_interface function, modify the error handling:
 
 def display_yfinance_interface():
     st.subheader("YFinance Data Retrieval")
@@ -132,9 +118,6 @@ def display_yfinance_interface():
         value=st.session_state.symbol,
         placeholder="e.g., AAPL, MSFT, GOOGL"
     ).upper()
-    
-    if symbol == "CING":
-        st.info("CING data is available from December 2021. Use periods like 1mo or Custom (post-2021).")
     
     # Period selection
     col1, col2 = st.columns(2)
@@ -168,37 +151,34 @@ def display_yfinance_interface():
     
     if st.button("📥 Download Data", type="primary"):
         if symbol:
-            if not re.match(r'^[A-Z0-9.-]+$', symbol):
-                st.error("❌ Please enter a valid stock symbol (e.g., AAPL, CING)")
-            elif period_type == "Custom Range" and (
-                pd.Timestamp(start_date) >= pd.Timestamp(end_date) or 
-                pd.Timestamp(end_date) > pd.Timestamp.now()
-            ):
-                st.error("❌ Start date must be before end date, and end date cannot be in the future")
-            else:
-                with st.spinner("Downloading data from YFinance..."):
-                    try:
-                        data = data_loader.load_yfinance_data(symbol, period, start_date, end_date)
-                        if data is not None and not data.empty:
-                            st.session_state.data = data
-                            st.session_state.symbol = symbol
-                            st.session_state.period = period if period else f"{start_date} to {end_date}"
-                            
-                            # Process data
-                            st.session_state.processed_data = process_stock_data(data)
-                            
-                            st.success(f"✅ Data downloaded successfully for {symbol}")
-                            
-                            # Display data info
-                            display_data_info(data, symbol)
-                            st.rerun()
-                        else:
-                            suggestions = "1mo, Custom (post-2021)" if symbol == "CING" else "1mo, ytd, Custom"
-                            st.error(f"❌ No data found for {symbol} in period {period if period else f'{start_date} to {end_date}'}. "
-                                     f"Try a period like {suggestions}, another symbol (e.g., AAPL), or File Import.")
-                    except Exception as e:
-                        logger.error(f"Exception in yfinance download: {str(e)}")
-                        st.error(f"❌ Error downloading data: {str(e)}")
+            with st.spinner("Downloading data from YFinance..."):
+                try:
+                    data = data_loader.load_yfinance_data(symbol, period, start_date, end_date)
+                    if data is not None and not data.empty:
+                        st.session_state.data = data
+                        st.session_state.symbol = symbol
+                        st.session_state.period = period if period else f"{start_date} to {end_date}"
+                        
+                        # Process data
+                        st.session_state.processed_data = data_processor.process_stock_data(data)
+                        
+                        st.success(f"✅ Data downloaded successfully for {symbol}")
+                        
+                        # Display data info
+                        display_data_info(data, symbol)
+                        st.rerun()
+                    else:
+                        suggestions = ["1mo", "3mo", "6mo", "ytd", "Custom (specific dates)"]
+                        st.error(
+                            f"❌ No data found for {symbol} in period {period if period else f'{start_date} to {end_date'}. "
+                            f"Try:\n"
+                            f"- Different periods like: {', '.join(suggestions)}\n"
+                            f"- Another symbol (e.g., MSFT, GOOGL)\n"
+                            f"- File Import option"
+                        )
+                except Exception as e:
+                    logger.error(f"Exception in yfinance download: {str(e)}")
+                    st.error(f"❌ Error downloading data: {str(e)}")
         else:
             st.warning("⚠️ Please enter a stock symbol")
 
