@@ -9,11 +9,17 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def fetch_yfinance_data(symbol, start_date=None, end_date=None, period=None, retries=3, delay=2):
-    """Fetch stock data from yfinance for the given symbol and period or date range."""
     logger.info(f"Fetching data for {symbol}, period: {period}, start: {start_date}, end: {end_date}")
-
     now = datetime.now()
-
+    # ... period mapping code ...
+    # Correction:
+    if end_date is not None:
+        if end_date.date() >= now.date():
+            end_date = now - timedelta(days=1)
+            logger.info(f"Adjusted end_date to {end_date.date()} to avoid requesting future or incomplete data.")
+    if start_date is not None and end_date is not None and start_date >= end_date:
+        raise ValueError(f"start_date {start_date.date()} must be before end_date {end_date.date()}")
+   
     # Map periods to date ranges
     if period and not (start_date and end_date):
         period_map = {
