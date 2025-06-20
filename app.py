@@ -109,12 +109,15 @@ if data_source == "Yahoo Finance":
                         if st.session_state.data.empty:
                             st.error(
                                 f"No data found for {st.session_state.symbol} in period {st.session_state.period}. "
-                                f"Try real-time, 1M, YTD, or Custom. If issues persist, check your network or try File Import."
+                                f"Try real-time, 1M, YTD, or a shorter Custom period. If issues persist, check your network or try File Import."
                             )
                         else:
                             st.success(f"Data loaded for {st.session_state.symbol}")
+                            # Display date range from real-time data
+                            if st.session_state.data.index[0] and st.session_state.data.index[-1]:
+                                st.info(f"Data available from {st.session_state.data.index[0].date()} to {st.session_state.data.index[-1].date()}")
                     except Exception as e:
-                        st.error(f"Error loading data: {str(e)}. Try real-time, 1M, YTD, or check your network connection.")
+                        st.error(f"Error loading data: {str(e)}. Try real-time, 1M, YTD, or a shorter Custom period, or check your network connection.")
     
     with col6:
         if st.button("Clear", key="clear"):
