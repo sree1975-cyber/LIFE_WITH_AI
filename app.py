@@ -120,7 +120,7 @@ if data_source == "Yahoo Finance":
                 st.error("Please enter a valid stock symbol (e.g., AAPL, CING)")
             else:
                 with st.spinner("Downloading data from YFinance..."):
-                    for attempt in range(1, 4):  # Retry up to 3 times
+                    for attempt in range(1, 5):  # Retry up to 4 times
                         try:
                             logger.info(f"Attempt {attempt}: Downloading data for {st.session_state.symbol}, period: {period if period else 'Custom'}, start: {start_date_input}, end: {end_date_input}")
                             if period_type == "Custom Range":
@@ -129,9 +129,7 @@ if data_source == "Yahoo Finance":
                                     start=start_date_input,
                                     end=end_date_input,
                                     interval="1d",
-                                    progress=False,
-                                    auto_adjust=True,
-                                    prepost=False
+                                    progress=False
                                 )
                                 st.session_state.start_date = start_date_input
                                 st.session_state.end_date = end_date_input
@@ -141,20 +139,18 @@ if data_source == "Yahoo Finance":
                                     st.session_state.symbol,
                                     period=period,
                                     interval="1d",
-                                    progress=False,
-                                    auto_adjust=True,
-                                    prepost=False
+                                    progress=False
                                 )
                                 st.session_state.period = period
                             
                             if data.empty:
                                 logger.warning(f"Empty data returned for {st.session_state.symbol}, period: {st.session_state.period}")
-                                if attempt < 3:
-                                    time.sleep(2 * attempt)  # Exponential backoff
+                                if attempt < 4:
+                                    time.sleep(3 * attempt)  # Exponential backoff
                                     continue
                                 suggestions = "1mo, Custom (post-2021)" if st.session_state.symbol == "CING" else "1mo, ytd, Custom"
                                 try:
-                                    max_data = yf.download(st.session_state.symbol, period="max", progress=False, auto_adjust=True)
+                                    max_data = yf.download(st.session_state.symbol, period="max", progress=False)
                                     if not max_data.empty:
                                         start = max_data.index[0].date()
                                         end = max_data.index[-1].date()
@@ -197,13 +193,13 @@ if data_source == "Yahoo Finance":
                                 break
                         except Exception as e:
                             logger.error(f"Attempt {attempt} failed for {st.session_state.symbol}: {str(e)}")
-                            if attempt < 3:
-                                time.sleep(2 * attempt)
+                            if attempt < 4:
+                                time.sleep(3 * attempt)
                                 continue
                             st.error(f"❌ Error downloading data: {str(e)}")
     
     with col6:
-        if st.button("Clear", key="clear"):
+        if st.button("🔄 Clear", key="clear", type="secondary"):
             st.session_state.data = None
             st.session_state.symbol = "AAPL"
             st.session_state.period = "1y"
@@ -229,17 +225,17 @@ else:
     csv = sample_data.to_csv()
     st.download_button("Download Sample CSV", data=csv, file_name="sample_stock_data.csv")
     
-    if st.button("Process", key="process"):
+    if st.button("📤 Process", key="process", type="primary"):
         if uploaded_file:
             try:
                 st.session_state.data = load_file_data(uploaded_file)
-                st.success("File data loaded successfully")
+                st.success("✅ File processed successfully")
             except ValueError as e:
-                st.error(f"Error processing file: {str(e)}")
+                st.error(f"❌ Error processing file: {str(e)}")
             except Exception as e:
-                st.error(f"Unexpected error processing file: {str(e)}")
+                st.error(f"❌ Unexpected error processing file: {str(e)}")
     
-    if st.button("Clear", key="clear_file"):
+    if st.button("🔄 Clear", key="clear_file", type="secondary"):
         st.session_state.data = None
         st.rerun()
 
@@ -247,7 +243,7 @@ else:
 if st.session_state.data is not None and not st.session_state.data.empty:
     st.session_state.data.columns = st.session_state.data.columns.str.lower()
     
-    with st.expander("View Raw Data"):
+    with st.expander("📋 View Raw Data"):
         st.dataframe(st.session_state.data)
     
     if data_source == "Yahoo Finance":
@@ -264,18 +260,18 @@ if st.session_state.data is not None and not st.session_state.data.empty:
     pl_data = calculate_indicators(pl_data)
     pl_data = apply_strategies(pl_data)
     
-    with st.expander("Profit and Loss Analysis"):
+    with st.expander("💰 Profit and Loss Analysis"):
         st.dataframe(pl_data)
     
     monthly_pl = create_monthly_pl_table(pl_data, st.session_state.period)
-    with st.expander("Monthly P/L Comparison"):
+    with st.expander("📅 Monthly P/L Comparison"):
         st.plotly_chart(monthly_pl, use_container_width=True)
     
     candlestick_chart = create_candlestick_chart(pl_data)
-    with st.expander("Candlestick Chart"):
+    with st.expander("📈 Candlestick Chart"):
         st.plotly_chart(candlestick_chart, use_container_width=True)
     
-    with st.expander("Price Prediction"):
+    with st.expander("🔮 Price Prediction"):
         horizon = st.selectbox("Prediction Horizon", ["1 Day", "5 Days", "1 Month"], key="horizon")
         horizon_map = {"1 Day": 1, "5 Days": 5, "1 Month": 30}
         try:
@@ -283,7 +279,7 @@ if st.session_state.data is not None and not st.session_state.data.empty:
             st.dataframe(pred_df)
             st.plotly_chart(pred_chart, use_container_width=True)
         except Exception as e:
-            st.error(f"Error in prediction: {str(e)}")
+            st.error(f"❌ Error in prediction: {str(e)}")
 
 # Export Data
 if st.session_state.data is not None and not st.session_state.data.empty:
