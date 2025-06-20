@@ -24,7 +24,6 @@ def load_yfinance_data(symbol, period, start_date=None, end_date=None):
             data = fetch_yfinance_data(symbol, period=period)
         
         if data.empty:
-            # Try fetching max period to check available range
             try:
                 max_data = fetch_yfinance_data(symbol, period="MAX")
                 if not max_data.empty:
@@ -44,12 +43,10 @@ def load_yfinance_data(symbol, period, start_date=None, end_date=None):
                 f"Try a period like {suggestions}, another symbol (e.g., AAPL), or use File Import."
             )
         
-        # Ensure required columns
         required_columns = {'open', 'high', 'low', 'close', 'volume'}
         if not all(col in data.columns for col in required_columns):
             raise ValueError(f"Data missing required columns: {required_columns}")
         
-        # Normalize column names
         data.columns = [col.lower() for col in data.columns]
         logger.info(f"Successfully loaded data for {symbol}")
         return data
