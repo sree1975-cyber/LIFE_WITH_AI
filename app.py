@@ -15,13 +15,15 @@ st.set_page_config(page_title="Stock Analysis Dashboard", layout="wide")
 if 'data' not in st.session_state:
     st.session_state.data = None
 if 'symbol' not in st.session_state:
-    st.session_state.symbol = ""
+    st.session_state.symbol = "AAPL"  # Default to AAPL
 if 'period' not in st.session_state:
     st.session_state.period = "1Y"
 if 'start_date' not in st.session_state:
     st.session_state.start_date = None
 if 'end_date' not in st.session_state:
     st.session_state.end_date = None
+if 'is_custom_symbol' not in st.session_state:
+    st.session_state.is_custom_symbol = False  # Track custom input
 
 # Sidebar for data source selection
 st.sidebar.header("Data Source")
@@ -34,35 +36,63 @@ st.title("Stock Market Analysis Dashboard")
 if data_source == "Yahoo Finance":
     st.header("Yahoo Finance Data")
     col1, col2 = st.columns([2, 1])
+    
     with col1:
         symbols = ["AAPL", "TSLA", "MSFT", "GOOGL", "AMZN", "CING"]
-        st.session_state.symbol = st.selectbox(
-            "Select or enter symbol",
+        symbol_selection = st.selectbox(
+            "Select or Enter Symbol",
             options=symbols + ["Custom"],
-            index=symbols.index(st.session_state.symbol) if st.session_state.symbol in symbols else len(symbols)
+            index=symbols.index(st.session_state.symbol) if st.session_state.symbol in symbols else len(symbols),
+            key="symbol_select"
         )
-        if st.session_state.symbol == "Custom":
-            st.session_state.symbol = st.text_input("Enter Stock Symbol (e.g., AAPL, CING)", value="")
+        
+        # Update session state based on selection
+        if symbol_selection == "Custom":
+            st.session_state.is_custom_symbol = True
+            st.session_state.symbol = st.text_input(
+                "Enter Stock Symbol (e.g., AAPL, CING)",
+                value=st.session_state.symbol if st.session_state.is_custom_symbol else "",
+                key="custom_symbol"
+            )
+        else:
+            st.session_state.is_custom_symbol = False
+            st.session_state.symbol = symbol_selection
+        
         if st.session_state.symbol == "CING":
             st.info("CING data is available from December 2021. Use periods like 1M or Custom (post-2021).")
+    
     with col2:
-        periods = ["1D", "5D", "15D", "30D", "1M", "3M", "6M", "YTD", "1Y", "2Y", "3Y", "5Y", "MAX", "Custom"]
-        st.session_state.period = st.selectbox("Select Period", periods, index=periods.index(st.session_state.period))
+        periods = ["1D", "5D", "15D", "30D", "1M", "3M", "6M", "YTD", "1Y", "2Y", "3Y", "5Y", 
+             "MAX", "Custom"]
+        st.session_state.period = st.selectbox("Select Period", periods, 
+                                       index=periods.index(st.session_state.period),
+                                       key="period_select")
     
     if st.session_state.period == "Custom":
         col3, col4 = st.columns(2)
         with col3:
-            st.session_state.start_date = st.date_input("Start Date", value=pd.to_datetime("today") - pd.Timedelta(days=365))
+            st.session_state.start_date = st.date_input(
+                "Start Date", 
+                value=pd.to_datetime("today") - pd.Timedelta(days=365),
+                key="start_date"
+            )
         with col4:
-            st.session_state.end_date = st.date_input("End Date", value=pd.to_datetime("today"))
+            st.session_state.end_date = st.date_input(
+                "End Date", 
+                value=pd.to_datetime("today"),
+                key="end_date"
+            )
     
     col5, col6 = st.columns([2, 1])
     with col5:
-        if st.button("Submit"):
+        if st.button("Submit", key="submit"):
             # Validate symbol
             if not st.session_state.symbol or not re.match(r'^[A-Z0-9.-]+$', st.session_state.symbol):
                 st.error("Please enter a valid stock symbol (e.g., AAPL, CING)")
-            elif st.session_state.period == "Custom" and (pd.Timestamp(st.session_state.start_date) >= pd.Timestamp(st.session_state.end_date) or pd.Timestamp(st.session_state.end_date) > pd.Timestamp.now()):
+            elif st.session_state.period == "Custom" and (
+                pd.Timestamp(st.session_state.start_date) >= pd.Timestamp(st.session_state.end_date) or 
+                pd.Timestamp(st.session_state.end_date) > pd.Timestamp.now()
+            ):
                 st.error("Start date must be before end date, and end date cannot be in the future")
             else:
                 with st.spinner("Loading data from Yahoo Finance..."):
@@ -75,20 +105,28 @@ if data_source == "Yahoo Finance":
                                 end_date=st.session_state.end_date
                             )
                         else:
-                            st.session_state.data = load_yfinance_data(st.session_state.symbol, st.session_state.period)
+                            st.session_state.data = load_yfinance_data(
+                                st.session_state.symbol, 
+                                st.session_state.period
+                            )
                         if st.session_state.data.empty:
-                            st.error(f"No data found for {st.session_state.symbol} in period {st.session_state.period}. Try 1M, Custom (post-2021 for CING), another symbol (e.g., AAPL), or File Import.")
+                            st.error(
+                                f"No data found for {st.session_state.symbol} in period {st.session_state.period}. "
+                                f"Try 1M, Custom (post-2021 for CING), another symbol (e.g., AAPL), or File Import."
+                            )
                         else:
                             st.success(f"Data loaded for {st.session_state.symbol}")
                     except Exception as e:
                         st.error(f"Error loading data: {str(e)}")
+    
     with col6:
-        if st.button("Clear"):
+        if st.button("Clear", key="clear"):
             st.session_state.data = None
-            st.session_state.symbol = ""
+            st.session_state.symbol = "AAPL"
             st.session_state.period = "1Y"
             st.session_state.start_date = None
             st.session_state.end_date = None
+            st.session_state.is_custom_symbol = False
             st.experimental_rerun()
 
 # File Import UI
@@ -109,7 +147,7 @@ else:
     csv = sample_data.to_csv()
     st.download_button("Download Sample CSV", data=csv, file_name="sample_stock_data.csv")
     
-    if st.button("Process"):
+    if st.button("Process", key="process"):
         if uploaded_file:
             try:
                 st.session_state.data = load_file_data(uploaded_file)
@@ -118,7 +156,8 @@ else:
                 st.error(f"Error processing file: {str(e)}")
             except Exception as e:
                 st.error(f"Unexpected error processing file: {str(e)}")
-    if st.button("Clear"):
+    
+    if st.button("Clear", key="clear_file"):
         st.session_state.data = None
         st.experimental_rerun()
 
@@ -164,7 +203,7 @@ if st.session_state.data is not None and not st.session_state.data.empty:
     
     # Price Prediction
     with st.expander("Price Prediction"):
-        horizon = st.selectbox("Prediction Horizon", ["1 Day", "5 Days", "1 Month"])
+        horizon = st.selectbox("Prediction Horizon", ["1 Day", "5 Days", "1 Month"], key="horizon")
         horizon_map = {"1 Day": 1, "5 Days": 5, "1 Month": 30}
         try:
             pred_df, pred_chart = predict_prices(pl_data, horizon_map[horizon])
@@ -176,15 +215,26 @@ if st.session_state.data is not None and not st.session_state.data.empty:
 # Export Data
 if st.session_state.data is not None and not st.session_state.data.empty:
     st.header("Export Data")
-    export_format = st.selectbox("Select Export Format", ["CSV", "XLSX"])
-    export_data = pl_data if st.session_state.data is not None else st.session_state.data
+    export_format = st.selectbox("Select Export Format", ["CSV", "XLSX"], key="export_format")
+    export_data = pl_data if 'pl_data' in locals() else st.session_state.data
     if export_format == "CSV":
         csv = export_data.to_csv(index=True)
-        st.download_button("Download Data", csv, f"stock_data_{st.session_state.symbol or 'file'}.csv", "text/csv")
+        st.download_button(
+            "Download Data", 
+            csv, 
+            f"stock_data_{st.session_state.symbol or 'file'}.csv", 
+            "text/csv",
+            key="download_csv"
+        )
     else:
         import io
         output = io.BytesIO()
         export_data.to_excel(output, index=True)
         output.seek(0)
-        st.download_button("Download Data", output, f"stock_data_{st.session_state.symbol or 'file'}.xlsx", 
-                          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button(
+            "Download Data", 
+            output, 
+            f"stock_data_{st.session_state.symbol or 'file'}.xlsx", 
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="download_xlsx"
+        )
