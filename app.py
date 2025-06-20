@@ -15,7 +15,7 @@ st.set_page_config(page_title="Stock Analysis Dashboard", layout="wide")
 if 'data' not in st.session_state:
     st.session_state.data = None
 if 'symbol' not in st.session_state:
-    st.session_state.symbol = "AAPL"  # Default to AAPL
+    st.session_state.symbol = "AAPL"
 if 'period' not in st.session_state:
     st.session_state.period = "1Y"
 if 'start_date' not in st.session_state:
@@ -23,7 +23,7 @@ if 'start_date' not in st.session_state:
 if 'end_date' not in st.session_state:
     st.session_state.end_date = None
 if 'is_custom_symbol' not in st.session_state:
-    st.session_state.is_custom_symbol = False  # Track custom input
+    st.session_state.is_custom_symbol = False
 
 # Sidebar for data source selection
 st.sidebar.header("Data Source")
@@ -46,7 +46,6 @@ if data_source == "Yahoo Finance":
             key="symbol_select"
         )
         
-        # Update session state based on selection
         if symbol_selection == "Custom":
             st.session_state.is_custom_symbol = True
             st.session_state.symbol = st.text_input(
@@ -62,11 +61,10 @@ if data_source == "Yahoo Finance":
             st.info("CING data is available from December 2021. Use periods like 1M or Custom (post-2021).")
     
     with col2:
-        periods = ["1D", "5D", "15D", "30D", "1M", "3M", "6M", "YTD", "1Y", "2Y", "3Y", "5Y", 
-             "MAX", "Custom"]
+        periods = ["1D", "5D", "15D", "30D", "1M", "3M", "6M", "YTD", "1Y", "2Y", "3Y", "5Y", "MAX", "Custom"]
         st.session_state.period = st.selectbox("Select Period", periods, 
-                                       index=periods.index(st.session_state.period),
-                                       key="period_select")
+                                               index=periods.index(st.session_state.period),
+                                               key="period_select")
     
     if st.session_state.period == "Custom":
         col3, col4 = st.columns(2)
@@ -86,7 +84,6 @@ if data_source == "Yahoo Finance":
     col5, col6 = st.columns([2, 1])
     with col5:
         if st.button("Submit", key="submit"):
-            # Validate symbol
             if not st.session_state.symbol or not re.match(r'^[A-Z0-9.-]+$', st.session_state.symbol):
                 st.error("Please enter a valid stock symbol (e.g., AAPL, CING)")
             elif st.session_state.period == "Custom" and (
@@ -135,7 +132,6 @@ else:
     uploaded_file = st.file_uploader("Upload .csv or .xlsx file", type=["csv", "xlsx"])
     st.markdown("File must contain columns: Date (index), Open, High, Low, Close, Volume.")
     
-    # Sample CSV Download
     sample_data = pd.DataFrame({
         "Date": ["2025-06-20", "2025-06-19"],
         "Open": [2.0, 1.95],
@@ -163,14 +159,11 @@ else:
 
 # Display Data and Analysis
 if st.session_state.data is not None and not st.session_state.data.empty:
-    # Normalize column names
     st.session_state.data.columns = st.session_state.data.columns.str.lower()
     
-    # Display Raw Data
     with st.expander("View Raw Data"):
         st.dataframe(st.session_state.data)
     
-    # Yahoo Finance Messages
     if data_source == "Yahoo Finance":
         try:
             import yfinance as yf
@@ -182,26 +175,21 @@ if st.session_state.data is not None and not st.session_state.data.empty:
         except:
             st.warning("Unable to fetch historical data range. Data may still be valid.")
 
-    # Calculate P/L and Indicators
     pl_data = calculate_pl(st.session_state.data)
     pl_data = calculate_indicators(pl_data)
     pl_data = apply_strategies(pl_data)
     
-    # Display P/L Table
     with st.expander("Profit and Loss Analysis"):
         st.dataframe(pl_data)
     
-    # Monthly P/L Table
     monthly_pl = create_monthly_pl_table(pl_data, st.session_state.period)
     with st.expander("Monthly P/L Comparison"):
         st.plotly_chart(monthly_pl, use_container_width=True)
     
-    # Candlestick Chart
     candlestick_chart = create_candlestick_chart(pl_data)
     with st.expander("Candlestick Chart"):
         st.plotly_chart(candlestick_chart, use_container_width=True)
     
-    # Price Prediction
     with st.expander("Price Prediction"):
         horizon = st.selectbox("Prediction Horizon", ["1 Day", "5 Days", "1 Month"], key="horizon")
         horizon_map = {"1 Day": 1, "5 Days": 5, "1 Month": 30}
