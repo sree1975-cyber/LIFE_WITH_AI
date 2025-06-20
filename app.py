@@ -4,6 +4,7 @@ import re
 from datetime import datetime, timedelta
 import yfinance as yf
 import logging
+import time
 from utils.data_loader import load_file_data
 from utils.calculations import calculate_pl
 from utils.visualizations import create_monthly_pl_table, create_candlestick_chart
@@ -41,7 +42,7 @@ st.title("Stock Market Analysis Dashboard")
 
 # Yahoo Finance UI
 if data_source == "Yahoo Finance":
-    st.header("Yahoo Finance Data")
+    st.subheader("YFinance Data Retrieval")
     col1, col2 = st.columns([2, 1])
     
     with col1:
@@ -56,7 +57,7 @@ if data_source == "Yahoo Finance":
         if symbol_selection == "Custom":
             st.session_state.is_custom_symbol = True
             st.session_state.symbol = st.text_input(
-                "Enter Stock Symbol (e.g., AAPL, CING)",
+                "Enter Stock Symbol",
                 value=st.session_state.symbol if st.session_state.is_custom_symbol else "",
                 key="custom_symbol",
                 placeholder="e.g., AAPL, MSFT, GOOGL"
@@ -77,14 +78,15 @@ if data_source == "Yahoo Finance":
         
         if period_type == "Predefined":
             periods = ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "ytd", "max"]
-            st.session_state.period = st.selectbox(
+            period = st.selectbox(
                 "Select Period",
                 periods,
                 index=periods.index(st.session_state.period) if st.session_state.period in periods else 5,
                 key="period_select"
             )
         else:
-            st.session_state.period = "Custom"
+            period = None
+            st.write("Custom Date Range")
     
     if period_type == "Custom Range":
         col3, col4 = st.columns(2)
@@ -100,96 +102,102 @@ if data_source == "Yahoo Finance":
                 value=st.session_state.end_date,
                 key="end_date"
             )
+    else:
+        start_date_input = None
+        end_date_input = None
     
     col5, col6 = st.columns([2, 1])
     with col5:
-        if st.button("📥 Submit", key="submit", type="primary"):
-            if not st.session_state.symbol or not re.match(r'^[A-Z0-9.-]+$', st.session_state.symbol):
-                st.error("Please enter a valid stock symbol (e.g., AAPL, CING)")
-            elif st.session_state.period == "Custom" and (
+        if st.button("📥 Download Data", key="submit", type="primary"):
+            if not st.session_state.symbol:
+                st.warning("⚠️ Please enter a stock symbol")
+            elif period_type == "Custom Range" and (
                 pd.Timestamp(start_date_input) >= pd.Timestamp(end_date_input) or 
                 pd.Timestamp(end_date_input) > pd.Timestamp.now()
             ):
                 st.error("Start date must be before end date, and end date cannot be in the future")
+            elif not re.match(r'^[A-Z0-9.-]+$', st.session_state.symbol):
+                st.error("Please enter a valid stock symbol (e.g., AAPL, CING)")
             else:
-                with st.spinner("Downloading data from Yahoo Finance..."):
-                    try:
-                        logger.info(f"Attempting to download data for {st.session_state.symbol}, period: {st.session_state.period}")
-                        if st.session_state.period == "Custom":
-                            st.session_state.start_date = start_date_input
-                            st.session_state.end_date = end_date_input
-                            data = yf.download(
-                                st.session_state.symbol,
-                                start=start_date_input,
-                                end=end_date_input,
-                                interval="1d",
-                                progress=False
-                            )
-                        else:
-                            data = yf.download(
-                                st.session_state.symbol,
-                                period=st.session_state.period,
-                                interval="1d",
-                                progress=False
-                            )
-                        
-                        if data.empty:
-                            logger.warning(f"Empty data returned for {st.session_state.symbol}, period: {st.session_state.period}")
-                            suggestions = "1mo, Custom (post-2021)" if st.session_state.symbol == "CING" else "1mo, ytd, Custom"
-                            try:
-                                # Fallback to 1mo if shorter periods fail
-                                if st.session_state.period in ["1d", "5d"]:
-                                    logger.info(f"Falling back to 1mo for {st.session_state.symbol}")
-                                    data = yf.download(
-                                        st.session_state.symbol,
-                                        period="1mo",
-                                        interval="1d",
-                                        progress=False
-                                    )
-                                if data.empty:
+                with st.spinner("Downloading data from YFinance..."):
+                    for attempt in range(1, 4):  # Retry up to 3 times
+                        try:
+                            logger.info(f"Attempt {attempt}: Downloading data for {st.session_state.symbol}, period: {period if period else 'Custom'}, start: {start_date_input}, end: {end_date_input}")
+                            if period_type == "Custom Range":
+                                data = yf.download(
+                                    st.session_state.symbol,
+                                    start=start_date_input,
+                                    end=end_date_input,
+                                    interval="1d",
+                                    progress=False
+                                )
+                                st.session_state.start_date = start_date_input
+                                st.session_state.end_date = end_date_input
+                                st.session_state.period = f"{start_date_input} to {end_date_input}"
+                            else:
+                                data = yf.download(
+                                    st.session_state.symbol,
+(No artifact content truncated)
+                                    period=period,
+                                    interval="1d",
+                                    progress=False
+                                )
+                                st.session_state.period = period
+                            
+                            if data.empty:
+                                logger.warning(f"Empty data returned for {st.session_state.symbol}, period: {st.session_state.period}")
+                                if attempt < 3:
+                                    time.sleep(2 * attempt)  # Exponential backoff
+                                    continue
+                                suggestions = "1mo, Custom (post-2021)" if st.session_state.symbol == "CING" else "1mo, ytd, Custom"
+                                try:
                                     max_data = yf.download(st.session_state.symbol, period="max", progress=False)
                                     if not max_data.empty:
                                         start = max_data.index[0].date()
                                         end = max_data.index[-1].date()
                                         st.error(
                                             f"No data found for {st.session_state.symbol} in period {st.session_state.period}. "
-                                            f"Data is available from {start} Vaultto {end}. Try a period like {suggestions}."
+                                            f"Data is available from {start} to {end}. Try a period like {suggestions}."
                                         )
                                     else:
                                         st.error(
-                                            f"No data found for Anastasiafor {st.session_state.symbol} in period {st.session_state.period}. "
+                                            f"No data found for {st.session_state.symbol} in period {st.session_state.period}. "
                                             f"Try a period like {suggestions}, another symbol (e.g., AAPL), or File Import."
                                         )
-                                else:
-                                    st.session_state.data = data
-                                    st.success(f"✅ Fallback data (1mo) downloaded successfully for {st.session_state.symbol}")
-                            except Exception as e:
-                                logger.error(f"Error fetching max data for {st.session_state.symbol}: {str(e)}")
-                                st.error(
-                                    f"No data found for {st.session_state.symbol} in period {st.session_state.period}. "
-                                    f"Try a period like {suggestions}, another symbol (e.g., AAPL), or File Import."
-                                )
-                        else:
-                            if isinstance(data.columns, pd.MultiIndex):
-                                data.columns = data.columns.get_level_values(0)
-                            if not data.index.is_monotonic_increasing:
-                                data = data.sort_index()
-                            if data.index.duplicated().any():
-                                logger.warning(f"Duplicate indices found for {st.session_state.symbol}. Dropping duplicates.")
-                                data = data[~data.index.duplicated(keep='first')]
-                            if data.index.tz is not None:
-                                data.index = data.index.tz_localize(None)
-                            
-                            required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
-                            data = data[[col for col in required_columns if col in data.columns]]
-                            data.columns = [col.lower() for col in data.columns]
-                            
-                            st.session_state.data = data
-                            logger.info(f"Successfully downloaded data for {st.session_state.symbol}")
-                            st.success(f"✅ Data downloaded successfully for {st.session_state.symbol}")
-                    except Exception as e:
-                        logger.error(f"Error downloading data for {st.session_state.symbol}: {str(e)}")
-                        st.error(f"❌ Error downloading data: {str(e)}")
+                                except Exception as e:
+                                    logger.error(f"Error fetching max data for {st.session_state.symbol}: {str(e)}")
+                                    st.error(
+                                        f"No data found for {st.session_state.symbol} in period {st.session_state.period}. "
+                                        f"Try a period like {suggestions}, another symbol (e.g., AAPL), or File Import."
+                                    )
+                            else:
+                                if isinstance(data.columns, pd.MultiIndex):
+                                    data.columns = data.columns.get_level_values(0)
+                                if not data.index.is_monotonic_increasing:
+                                    data = data.sort_index()
+                                if data.index.duplicated().any():
+                                    logger.warning(f"Duplicate indices found for {st.session_state.symbol}. Dropping duplicates.")
+                                    data = data[~data.index.duplicated(keep='first')]
+                                if data.index.tz is not None:
+                                    data.index = data.index.tz_localize(None)
+                                
+                                required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+                                if not all(col in data.columns for col in required_columns):
+                                    logger.error(f"Missing required columns in data for {st.session_state.symbol}: {data.columns}")
+                                    st.error("Data missing required columns: Open, High, Low, Close, Volume")
+                                    break
+                                
+                                data.columns = [col.lower() for col in data.columns]
+                                st.session_state.data = data
+                                logger.info(f"Successfully downloaded data for {st.session_state.symbol}")
+                                st.success(f"✅ Data downloaded successfully for {st.session_state.symbol}")
+                                break
+                        except Exception as e:
+                            logger.error(f"Attempt {attempt} failed for {st.session_state.symbol}: {str(e)}")
+                            if attempt < 3:
+                                time.sleep(2 * attempt)
+                                continue
+                            st.error(f"❌ Error downloading data: {str(e)}")
     
     with col6:
         if st.button("Clear", key="clear"):
