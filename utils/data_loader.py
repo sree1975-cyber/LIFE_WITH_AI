@@ -9,19 +9,25 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def load_yfinance_data(symbol, period, start_date=None, end_date=None, retries=3, delay=2):
+def load_yfinance_data(symbol, period, start_date=None, end_date=None, retries=3, delay=5):
     """Load stock data from yfinance for the given symbol and period with retry mechanism."""
+    # Skip validation for known valid symbols to avoid JSON decode errors
+    known_symbols = {"AAPL", "TSLA", "MSFT", "GOOGL", "AMZN"}
+    
     for attempt in range(1, retries + 1):
         try:
             logger.info(f"Attempt {attempt} to load data for {symbol}, period: {period}")
             ticker = yf.Ticker(symbol)
-            # Validate ticker
-            try:
-                info = ticker.info
-                if not info or 'symbol' not in info:
-                    raise ValueError(f"Invalid stock symbol: {symbol}")
-            except json.decoder.JSONDecodeError as e:
-                raise ValueError(f"Failed to validate symbol {symbol}: JSON decode error ({str(e)})")
+            
+            # Only validate unknown symbols
+            if symbol.upper() not in known_symbols:
+                try:
+                    info = ticker.info
+                    if not info or 'symbol' not in info:
+                        raise ValueError(f"Invalid stock symbol: {symbol}")
+                except json.decoder.JSONDecodeError as e:
+                    logger.warning(f"JSON decode error during symbol validation for {symbol}: {str(e)}")
+                    raise ValueError(f"Failed to validate symbol {symbol}: JSON decode error")
             
             if period == "Custom":
                 if start_date >= end_date:
@@ -47,13 +53,14 @@ def load_yfinance_data(symbol, period, start_date=None, end_date=None, retries=3
         except json.decoder.JSONDecodeError as e:
             logger.warning(f"JSON decode error for {symbol} on attempt {attempt}: {str(e)}")
             if attempt == retries:
-                raise ValueError(f"Failed to load data for {symbol} after {retries} attempts: JSON decode error. Yahoo Finance API may be unavailable.")
+                raise ValueError(f"Failed to load data for {symbol} after {retries} attempts: Yahoo Finance API unavailable or rate-limited.")
         except Exception as e:
             logger.warning(f"Error loading data for {symbol} on attempt {attempt}: {str(e)}")
             if attempt == retries:
                 raise ValueError(f"Failed to load data for {symbol} after {retries} attempts: {str(e)}")
         
-        time.sleep(delay)  # Delay before retry
+        # Exponential backoff
+        time.sleep(delay * (2 ** (attempt - 1)))  # 5s, 10s, 20s for attempts 1, 2, 3
     
     raise ValueError(f"Failed to load data for {symbol} after {retries} attempts")
 
