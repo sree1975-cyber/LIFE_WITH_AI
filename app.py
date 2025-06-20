@@ -129,7 +129,9 @@ if data_source == "Yahoo Finance":
                                     start=start_date_input,
                                     end=end_date_input,
                                     interval="1d",
-                                    progress=False
+                                    progress=False,
+                                    auto_adjust=True,
+                                    prepost=False
                                 )
                                 st.session_state.start_date = start_date_input
                                 st.session_state.end_date = end_date_input
@@ -137,10 +139,11 @@ if data_source == "Yahoo Finance":
                             else:
                                 data = yf.download(
                                     st.session_state.symbol,
-(No artifact content truncated)
                                     period=period,
                                     interval="1d",
-                                    progress=False
+                                    progress=False,
+                                    auto_adjust=True,
+                                    prepost=False
                                 )
                                 st.session_state.period = period
                             
@@ -151,7 +154,7 @@ if data_source == "Yahoo Finance":
                                     continue
                                 suggestions = "1mo, Custom (post-2021)" if st.session_state.symbol == "CING" else "1mo, ytd, Custom"
                                 try:
-                                    max_data = yf.download(st.session_state.symbol, period="max", progress=False)
+                                    max_data = yf.download(st.session_state.symbol, period="max", progress=False, auto_adjust=True)
                                     if not max_data.empty:
                                         start = max_data.index[0].date()
                                         end = max_data.index[-1].date()
