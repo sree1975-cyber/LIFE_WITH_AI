@@ -4,7 +4,6 @@ import re
 from datetime import datetime, timedelta
 import yfinance as yf
 import logging
-import time
 from utils.data_loader import load_file_data
 from utils.calculations import calculate_pl
 from utils.visualizations import create_monthly_pl_table, create_candlestick_chart
@@ -115,68 +114,47 @@ if data_source == "Yahoo Finance":
                 pd.Timestamp(start_date) >= pd.Timestamp(end_date) or 
                 pd.Timestamp(end_date) > pd.Timestamp.now()
             ):
-                st.error("Start date must be before end date, and end date cannot be in the future")
+                st.error("❌ Start date must be before end date, and end date cannot be in the future")
             elif not re.match(r'^[A-Z0-9.-]+$', st.session_state.symbol):
-                st.error("Please enter a valid stock symbol (e.g., AAPL, CING)")
+                st.error("❌ Please enter a valid stock symbol (e.g., AAPL, CING)")
             else:
                 with st.spinner("Downloading data from YFinance..."):
-                    for attempt in range(1, 5):  # Retry up to 4 times
-                        try:
-                            logger.info(f"Attempt {attempt}: Downloading data for {st.session_state.symbol}, period: {period if period else 'Custom'}, start: {start_date}, end: {end_date}")
-                            if period_type == "Custom Range":
-                                data = yf.download(
-                                    st.session_state.symbol,
-                                    start=start_date,
-                                    end=end_date,
-                                    interval="1d"
-                                )
-                                st.session_state.start_date = start_date
-                                st.session_state.end_date = end_date
-                                st.session_state.period = f"{start_date} to {end_date}"
-                            else:
-                                data = yf.download(
-                                    st.session_state.symbol,
-                                    period=period,
-                                    interval="1d"
-                                )
-                                st.session_state.period = period
-                            
-                            if data is None or data.empty:
-                                logger.warning(f"Empty data returned for {st.session_state.symbol}, period: {st.session_state.period}")
-                                if attempt < 4:
-                                    time.sleep(3 * attempt)  # Exponential backoff
-                                    continue
-                                suggestions = "1mo, Custom (post-2021)" if st.session_state.symbol == "CING" else "1mo, ytd, Custom"
-                                st.error(f"❌ No data found for {st.session_state.symbol} in period {st.session_state.period}. "
-                                         f"Try a period like {suggestions}, another symbol (e.g., AAPL), or File Import.")
-                            else:
-                                if isinstance(data.columns, pd.MultiIndex):
-                                    data.columns = data.columns.get_level_values(0)
-                                if not data.index.is_monotonic_increasing:
-                                    data = data.sort_index()
-                                if data.index.duplicated().any():
-                                    logger.warning(f"Duplicate indices found for {st.session_state.symbol}. Dropping duplicates.")
-                                    data = data[~data.index.duplicated(keep='first')]
-                                if data.index.tz is not None:
-                                    data.index = data.index.tz_localize(None)
-                                
-                                required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
-                                if not all(col in data.columns for col in required_columns):
-                                    logger.error(f"Missing required columns in data for {st.session_state.symbol}: {data.columns}")
-                                    st.error("❌ Data missing required columns: Open, High, Low, Close, Volume")
-                                    break
-                                
-                                data.columns = [col.lower() for col in data.columns]
-                                st.session_state.data = data
-                                logger.info(f"Successfully downloaded data for {st.session_state.symbol}")
-                                st.success(f"✅ Data downloaded successfully for {st.session_state.symbol}")
-                                break
-                        except Exception as e:
-                            logger.error(f"Attempt {attempt} failed for {st.session_state.symbol}: {str(e)}")
-                            if attempt < 4:
-                                time.sleep(3 * attempt)
-                                continue
-                            st.error(f"❌ Error downloading data: {str(e)}")
+                    try:
+                        logger.info(f"Downloading data for {st.session_state.symbol}, period: {period if period else 'Custom'}, start: {start_date}, end: {end_date}")
+                        if period_type == "Custom Range":
+                            data = yf.download(
+                                st.session_state.symbol,
+                                start=start_date,
+                                end=end_date,
+                                interval="1d"
+                            )
+                            st.session_state.start_date = start_date
+                            st.session_state.end_date = end_date
+                            st.session_state.period = f"{start_date} to {end_date}"
+                        else:
+                            data = yf.download(
+                                st.session_state.symbol,
+                                period=period,
+                                interval="1d"
+                            )
+                            st.session_state.period = period
+                        
+                        if data is None or data.empty:
+                            logger.warning(f"No data returned for {st.session_state.symbol}, period: {st.session_state.period}")
+                            suggestions = "1mo, Custom (post-2021)" if st.session_state.symbol == "CING" else "1mo, ytd, Custom"
+                            st.error(f"❌ No data found for {st.session_state.symbol} in period {st.session_state.period}. "
+                                     f"Try a period like {suggestions}, another symbol (e.g., AAPL), or File Import.")
+                        else:
+                            if isinstance(data.columns, pd.MultiIndex):
+                                data.columns = data.columns.get_level_values(0)
+                            data.columns = [col.lower() for col in data.columns]
+                            st.session_state.data = data
+                            logger.info(f"Successfully downloaded data for {st.session_state.symbol}")
+                            st.success(f"✅ Data downloaded successfully for {st.session_state.symbol}")
+                    except Exception as e:
+                        logger.error(f"Error downloading data for {st.session_state.symbol}: {str(e)}")
+                        suggestions = "1mo, Custom (post-2021)" if st.session_state.symbol == "CING" else "1mo, ytd, Custom"
+                        st.error(f"❌ Error downloading data: {str(e)}. Try a period like {suggestions}, another symbol (e.g., AAPL), or File Import.")
     
     with col6:
         if st.button("🔄 Clear", key="clear", type="secondary"):
@@ -192,28 +170,32 @@ if data_source == "Yahoo Finance":
 else:
     st.header("File Import")
     uploaded_file = st.file_uploader("Upload .csv or .xlsx file", type=["csv", "xlsx"])
-    st.markdown("File must contain columns: Date (index), Open, High, Low, Close, Volume.")
+    if uploaded_file:
+        st.markdown("File data uploaded. Click 'Process' to load the data.")
+        st.markdown("File must contain columns: Date (index), open, high, low, close, volume.")
     
     sample_data = pd.DataFrame({
-        "Date": ["2025-06-20", "2025-06-19"],
-        "Open": [2.0, 1.95],
-        "High": [2.1, 2.0],
-        "Low": [1.9, 1.9],
-        "Close": [2.05, 2.0],
-        "Volume": [100000, 120000]
-    }).set_index("Date")
+        "date": ["2025-06-20", "2025-06-19"],
+        "open": [2.0, 1.95],
+        "high": [2.1, 2.0],
+        "low": [1.9, 1.9],
+        "close": [2.05, 5.2],
+        "volume": [100000, 99999]
+    }).set_index("date")
     csv = sample_data.to_csv()
     st.download_button("Download Sample CSV", data=csv, file_name="sample_stock_data.csv")
     
-    if st.button("📤 Process", key="process", type="primary"):
-        if uploaded_file:
-            try:
+    if st.button("Process", key="process_file", type="primary"):
+        try:
+            with st.spinner("Processing uploaded file..."):
                 st.session_state.data = load_file_data(uploaded_file)
-                st.success("✅ File processed successfully")
-            except ValueError as e:
-                st.error(f"❌ Error processing file: {str(e)}")
-            except Exception as e:
-                st.error(f"❌ Unexpected error processing file: {str(e)}")
+                st.success("✅ File uploaded successfully")
+        except ValueError as e:
+            logger.error(f"Error downloading data: {str(e)}")
+            st.error(f"❌ Error processing file: {str(e)}")
+        except Exception as e:
+            logger.error(f"Unexpected error downloading data: {str(e)}")
+            st.error(f"❌ Unexpected error processing file: {str(e)}")
     
     if st.button("🔄 Clear", key="clear_file", type="secondary"):
         st.session_state.data = None
@@ -223,48 +205,49 @@ else:
 if st.session_state.data is not None and not st.session_state.data.empty:
     st.session_state.data.columns = st.session_state.data.columns.str.lower()
     
-    with st.expander("📋 View Raw Data"):
+    with st.expander("📈 Raw Data"):
         st.dataframe(st.session_state.data)
     
     if data_source == "Yahoo Finance":
         try:
-            ticker = yf.Ticker(st.session_state.symbol)
-            hist_data = ticker.history(period="max")
-            if not hist_data.empty:
-                st.info(f"Total historical data available from {hist_data.index[0].date()} to {hist_data.index[-1].date()}")
-            st.info(f"Selected period data from {st.session_state.data.index[0].date()} to {st.session_state.data.index[-1].date()}")
+            with_ticker = yf.Ticker(st.session_state.symbol)
+            historical_data = with_ticker.history(period="1mo")
+            if not historical_data.empty:
+                st.info(f"Data available from {historical_data.index[0].date()} to {historical_data.index[-1].date()}")
+            st.info(f"Period selected ranging from {st.session_state.data.index[0].date()} to {st.session_state.data.index[-1]].date()}")
         except:
-            st.warning("Unable to fetch historical data range. Data may still be valid.")
-
+            st.warning("⚠️ Unable to pull historical data ranges. Data is likely still valid.")
+    
     pl_data = calculate_pl(st.session_state.data)
     pl_data = calculate_indicators(pl_data)
     pl_data = apply_strategies(pl_data)
     
-    with st.expander("💰 Profit and Loss Analysis"):
+    with st.expander("Profit & Loss Analysis"):
         st.dataframe(pl_data)
     
     monthly_pl = create_monthly_pl_table(pl_data, st.session_state.period)
-    with st.expander("📅 Monthly P/L Comparison"):
+    with st.expander("Monthly P&L"):
         st.plotly_chart(monthly_pl, use_container_width=True)
     
     candlestick_chart = create_candlestick_chart(pl_data)
-    with st.expander("📈 Candlestick Chart"):
+    with st.expander("Candlestick Chart"):
         st.plotly_chart(candlestick_chart, use_container_width=True)
     
-    with st.expander("🔮 Price Prediction"):
-        horizon = st.selectbox("Prediction Horizon", ["1 Day", "5 Days", "1 Month"], key="horizon")
-        horizon_map = {"1 Day": 1, "5 Days": 5, "1 Month": 30}
+    with st.expander("Price Predictions"):
+        horizon = st.selectbox("Prediction Horizon", ["1 Day", "1 Week", "1 Month"], key="horizon")
+        horizon_map = {"1 Day": 1", "2 Week": 7, "1 Month": 30}
         try:
             pred_df, pred_chart = predict_prices(pl_data, horizon_map[horizon])
             st.dataframe(pred_df)
             st.plotly_chart(pred_chart, use_container_width=True)
         except Exception as e:
-            st.error(f"❌ Error in prediction: {str(e)}")
+            logger.error(f"Error predicting prices: {str(e)}")
+            st.error(f"❌ Prediction error:: {str(e)}")
 
-# Export Data
+# Data Export
 if st.session_state.data is not None and not st.session_state.data.empty:
     st.header("Export Data")
-    export_format = st.selectbox("Select Export Format", ["CSV", "XLSX"], key="export_format")
+    export_format = st.selectbox("Export Format", ["CSV", "XLSX"], key="export_format")
     export_data = pl_data if 'pl_data' in locals() else st.session_state.data
     if export_format == "CSV":
         csv = export_data.to_csv(index=True)
