@@ -14,59 +14,53 @@ def fetch_yfinance_data(symbol, start_date=None, end_date=None, period=None, int
     """Fetch stock data from yfinance for the given symbol and period or date range."""
     logger.info(f"Fetching data for {symbol}, period: {period}, start: {start_date}, end: {end_date}, interval: {interval}")
     
-    # Validate interval based on period
-    if period in ["1D", "5D", "real-time"] and interval not in ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "1d"]:
-        interval = "1d"
-        logger.info(f"Adjusted interval to '1d' for period {period}")
+    # Normalize period names to match both app.py and display_yfinance_interface
+    period_map = {
+        "real-time": ("1d", "1m"),
+        "1D": ("1d", "1d"), "1d": ("1d", "1d"),
+        "5D": ("5d", "1d"), "5d": ("5d", "1d"),
+        "15D": ("15d", "1d"), "15d": ("15d", "1d"),
+        "30D": ("30d", "1d"), "30d": ("30d", "1d"),
+        "1M": ("1mo", "1d"), "1mo": ("1mo", "1d"),
+        "3M": ("3mo", "1d"), "3mo": ("3mo", "1d"),
+        "6M": ("6mo", "1d"), "6mo": ("6mo", "1d"),
+        "YTD": ("ytd", "1d"), "ytd": ("ytd", "1d"),
+        "1Y": ("1y", "1d"), "1y": ("1y", "1d"),
+        "2Y": ("2y", "1d"), "2y": ("2y", "1d"),
+        "3Y": ("3y", "1d"), "3y": ("3y", "1d"),
+        "5Y": ("5y", "1d"), "5y": ("5y", "1d"),
+        "10y": ("10y", "1d"),
+        "MAX": ("max", "1d"), "max": ("max", "1d")
+    }
     
-    # Map periods to days for date range calculation
-    if period and not (start_date and end_date):
-        end_date = pd.to_datetime('today')
-        period_map = {
-            "real-time": 1,
-            "1D": 1,
-            "5D": 5,
-            "15D": 15,
-            "30D": 30,
-            "1M": 30,
-            "3M": 90,
-            "6M": 180,
-            "YTD": (pd.to_datetime('today') - pd.Timestamp(year=pd.to_datetime('today').year, month=1, day=1)).days,
-            "1Y": 365,
-            "2Y": 730,
-            "3Y": 1095,
-            "5Y": 1825,
-            "MAX": None
-        }
-        if period not in period_map:
-            raise ValueError(f"Invalid period: {period}")
-        if period == "MAX":
-            start_date = None
-        elif period == "real-time":
-            interval = "1m"
-            start_date = end_date - pd.Timedelta(days=1)
-        else:
-            start_date = end_date - pd.Timedelta(days=period_map[period])
+    # Map period to yfinance-compatible period and interval
+    if period and period in period_map and not (start_date and end_date):
+        yf_period, yf_interval = period_map[period]
+        interval = yf_interval
+    elif period == "Custom" or (start_date and end_date):
+        yf_period = None
+    else:
+        raise ValueError(f"Invalid period: {period}")
     
     start_date = pd.Timestamp(start_date) if start_date else None
     end_date = pd.Timestamp(end_date) if end_date else pd.to_datetime('today')
     
     for attempt in range(1, retries + 1):
         try:
-            if period == "real-time":
+            if yf_period == "1d" and interval == "1m":
                 data = yf.download(symbol, period="1d", interval="1m", progress=False)
-            elif period == "MAX":
-                data = yf.download(symbol, period="max", interval=interval, progress=False)
+            elif yf_period:
+                data = yf.download(symbol, period=yf_period, interval=interval, progress=False)
             else:
                 data = yf.download(symbol, start=start_date, end=end_date, interval=interval, progress=False)
             
             if data.empty:
                 logger.warning(f"No data returned for {symbol} on attempt {attempt} (period: {period}, start: {start_date}, end: {end_date})")
-                if period not in ["1D", "1M", "real-time"]:
-                    logger.info(f"Falling back to 1Y for {symbol}")
+                if period not in ["1D", "1d", "1M", "1mo", "real-time"]:
+                    logger.info(f"Falling back to 1y for {symbol}")
                     data = yf.download(symbol, period="1y", interval="1d", progress=False)
                 if data.empty:
-                    logger.info(f"Fallback to 1M for {symbol}")
+                    logger.info(f"Fallback to 1mo for {symbol}")
                     data = yf.download(symbol, period="1mo", interval="1d", progress=False)
                 if data.empty:
                     st.error(f"No data found for {symbol} from {start_date.date() if start_date else 'start'} to {end_date.date()}. Try a shorter period or check network.")
