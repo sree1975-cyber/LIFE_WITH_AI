@@ -211,4 +211,81 @@ else:
         except ValueError as e:
             logger.error(f"Error processing file: {str(e)}")
             st.error(f"❌ Error processing file: {str(e)}")
-        except Exception as e
+        except Exception as e:
+            logger.error(f"Unexpected error processing file: {str(e)}")
+            st.error(f"❌ Unexpected error processing file: {str(e)}")
+    
+    if st.button("🔄 Clear", key="clear_file", type="secondary"):
+        st.session_state.data = None
+        st.session_state.processed_data = None
+        st.rerun()
+
+# Display Data and Analysis
+if st.session_state.data is not None and not st.session_state.data.empty:
+    st.session_state.data.columns = st.session_state.data.columns.str.lower()
+    
+    with st.expander("📈 Raw Data"):
+        st.dataframe(st.session_state.data)
+    
+    if data_source == "Yahoo Finance":
+        try:
+            ticker = yf.Ticker(st.session_state.symbol)
+            hist_data = ticker.history(period="1mo")
+            if not hist_data.empty:
+                st.info(f"Data available from {hist_data.index[0].date()} to {hist_data.index[-1].date()}")
+            st.info(f"Period selected ranging from {st.session_state.data.index[0].date()} to {st.session_state.data.index[-1].date()}")
+        except:
+            st.warning("⚠️ Unable to fetch historical data range. Data may still be valid.")
+    
+    pl_data = calculate_pl(st.session_state.data)
+    pl_data = calculate_indicators(pl_data)
+    pl_data = apply_strategies(pl_data)
+    
+    with st.expander("💰 Profit and Loss Analysis"):
+        st.dataframe(pl_data)
+    
+    monthly_pl = create_monthly_pl_table(pl_data, st.session_state.period)
+    with st.expander("📅 Monthly P&L"):
+        st.plotly_chart(monthly_pl, use_container_width=True)
+    
+    candlestick_chart = create_candlestick_chart(pl_data)
+    with st.expander("📈 Candlestick Chart"):
+        st.plotly_chart(candlestick_chart, use_container_width=True)
+    
+    with st.expander("🔮 Price Prediction"):
+        horizon = st.selectbox("Prediction Horizon", ["1 Day", "5 Days", "1 Month"], key="horizon")
+        horizon_map = {"1 Day": 1, "5 Days": 5, "1 Month": 30}
+        try:
+            pred_df, pred_chart = predict_prices(pl_data, horizon_map[horizon])
+            st.dataframe(pred_df)
+            st.plotly_chart(pred_chart, use_container_width=True)
+        except Exception as e:
+            logger.error(f"Error predicting prices: {str(e)}")
+            st.error(f"❌ Prediction error: {str(e)}")
+
+# Data Export
+if st.session_state.data is not None and not st.session_state.data.empty:
+    st.header("Export Data")
+    export_format = st.selectbox("Export Format", ["CSV", "XLSX"], key="export_format")
+    export_data = pl_data if 'pl_data' in locals() else st.session_state.data
+    if export_format == "CSV":
+        csv = export_data.to_csv(index=True)
+        st.download_button(
+            "Download Data", 
+            csv, 
+            f"stock_data_{st.session_state.symbol or 'file'}.csv", 
+            "text/csv",
+            key="download_csv"
+        )
+    else:
+        import io
+        output = io.BytesIO()
+        export_data.to_excel(output, index=True)
+        output.seek(0)
+        st.download_button(
+            "Download Data", 
+            output, 
+            f"stock_data_{st.session_state.symbol or 'file'}.xlsx", 
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="download_xlsx"
+        )
