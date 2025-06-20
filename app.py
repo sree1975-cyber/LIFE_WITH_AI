@@ -5,6 +5,9 @@ from datetime import datetime, timedelta
 import yfinance as yf
 import logging
 import time
+import requests
+from urllib3.util.retry import Retry
+from requests.adapters import HTTPAdapter
 from utils.data_loader import load_file_data
 from utils.calculations import calculate_pl
 from utils.visualizations import create_monthly_pl_table, create_candlestick_chart
@@ -15,6 +18,18 @@ from utils.predictions import predict_prices
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Configure requests session with retry strategy
+session = requests.Session()
+retry = Retry(
+    total=5,
+    backoff_factor=0.3,
+    status_forcelist=[500, 502, 503, 504]
+)
+adapter = HTTPAdapter(max_retries=retry)
+session.mount('http://', adapter)
+session.mount('https://', adapter)
+yf.set_request_session(session)
 
 # Set page configuration
 st.set_page_config(page_title="Stock Analysis Dashboard", layout="wide")
@@ -29,37 +44,60 @@ if 'period' not in st.session_state:
 if 'processed_data' not in st.session_state:
     st.session_state.processed_data = None
 
-# DataLoader class to mimic app (1).py
 class DataLoader:
+    def __init__(self):
+        self.session = session
+        
     def load_yfinance_data(self, symbol, period, start_date, end_date):
-        try:
-            logger.info(f"Downloading yfinance data for {symbol}, period: {period}, start: {start_date}, end: {end_date}")
-            for attempt in range(1, 4):  # Retry up to 3 times
-                try:
-                    if period:
-                        data = yf.download(symbol, period=period, interval="1d")
-                    else:
-                        data = yf.download(symbol, start=start_date, end=end_date, interval="1d")
-                    if data is None or data.empty:
-                        logger.warning(f"Attempt {attempt}: Empty data for {symbol}")
-                        if attempt < 3:
-                            time.sleep(5 * attempt)  # Exponential backoff
-                            continue
-                        return None
-                    if isinstance(data.columns, pd.MultiIndex):
-                        data.columns = data.columns.get_level_values(0)
-                    data.columns = [col.lower() for col in data.columns]
-                    logger.info(f"Successfully downloaded data for {symbol}")
-                    return data
-                except Exception as e:
-                    logger.error(f"Attempt {attempt} failed for {symbol}: {str(e)}")
-                    if attempt < 3:
-                        time.sleep(5 * attempt)
+        max_retries = 3
+        backoff_factor = 2
+        
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(f"Attempt {attempt}: Downloading data for {symbol}")
+                
+                if period:
+                    data = yf.download(
+                        tickers=symbol,
+                        period=period,
+                        interval="1d",
+                        progress=False,
+                        ignore_tz=True
+                    )
+                else:
+                    data = yf.download(
+                        tickers=symbol,
+                        start=start_date,
+                        end=end_date,
+                        interval="1d",
+                        progress=False,
+                        ignore_tz=True
+                    )
+                
+                if data is None or data.empty:
+                    logger.warning(f"Attempt {attempt}: Empty data for {symbol}")
+                    if attempt < max_retries:
+                        sleep_time = backoff_factor ** attempt
+                        time.sleep(sleep_time)
                         continue
                     return None
-        except Exception as e:
-            logger.error(f"Unexpected error downloading yfinance data for {symbol}: {str(e)}")
-            return None
+                
+                # Clean up column names
+                if isinstance(data.columns, pd.MultiIndex):
+                    data.columns = data.columns.get_level_values(0)
+                data.columns = [col.lower() for col in data.columns]
+                
+                logger.info(f"Successfully downloaded data for {symbol}")
+                return data
+                
+            except Exception as e:
+                logger.error(f"Attempt {attempt} failed for {symbol}: {str(e)}")
+                if attempt < max_retries:
+                    sleep_time = backoff_factor ** attempt
+                    time.sleep(sleep_time)
+                    continue
+                logger.error(f"All attempts failed for {symbol}")
+                return None
     
     def load_file_data(self, uploaded_file):
         return load_file_data(uploaded_file)
@@ -84,8 +122,8 @@ def display_data_info(data, source):
     """)
 
 def process_stock_data(data):
-    """Placeholder for data processing, mimicking app (1).py"""
-    return data  # Replace with actual processing if needed
+    """Placeholder for data processing"""
+    return data
 
 def display_yfinance_interface():
     st.subheader("YFinance Data Retrieval")
