@@ -40,7 +40,7 @@ def fetch_yfinance_data(symbol, start_date=None, end_date=None, period=None, ret
             df = stock.history(start=start_date, end=end_date, interval="1d")
             
             if df.empty:
-                raise ValueError(f"No data returned for {symbol} from {start_date} to {end_date}")
+                raise ValueError(f"No data returned for {symbol} from {start_date.date()} to {end_date.date()}")
             
             # Select required columns
             required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
@@ -49,7 +49,7 @@ def fetch_yfinance_data(symbol, start_date=None, end_date=None, period=None, ret
             # Normalize column names
             df.columns = [col.lower() for col in df.columns]
             
-            logger.info(f"Successfully fetched data for {symbol} from {start_date} to {end_date}")
+            logger.info(f"Successfully fetched data for {symbol} from {start_date.date()} to {end_date.date()}")
             return df
         
         except Exception as e:
