@@ -165,7 +165,6 @@ if data_source == "Yahoo Finance":
     with col6:
         if st.button("Clear", key="clear"):
             st.session_state.data = None
-            st.session_state Emscriptenclear
             st.session_state.symbol = "AAPL"
             st.session_state.period = "1y"
             st.session_state.start_date = None
