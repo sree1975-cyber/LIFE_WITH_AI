@@ -19,18 +19,6 @@ from utils.predictions import predict_prices
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configure requests session with retry strategy
-session = requests.Session()
-retry = Retry(
-    total=5,
-    backoff_factor=0.3,
-    status_forcelist=[500, 502, 503, 504]
-)
-adapter = HTTPAdapter(max_retries=retry)
-session.mount('http://', adapter)
-session.mount('https://', adapter)
-yf.set_request_session(session)
-
 # Set page configuration
 st.set_page_config(page_title="Stock Analysis Dashboard", layout="wide")
 
@@ -46,7 +34,16 @@ if 'processed_data' not in st.session_state:
 
 class DataLoader:
     def __init__(self):
-        self.session = session
+        # Configure requests session with retry strategy
+        self.session = requests.Session()
+        retry = Retry(
+            total=5,
+            backoff_factor=0.3,
+            status_forcelist=[500, 502, 503, 504]
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        self.session.mount('http://', adapter)
+        self.session.mount('https://', adapter)
         
     def load_yfinance_data(self, symbol, period, start_date, end_date):
         max_retries = 3
@@ -56,13 +53,15 @@ class DataLoader:
             try:
                 logger.info(f"Attempt {attempt}: Downloading data for {symbol}")
                 
+                # Use the session we configured
+                yf.pdr_override()
+                
                 if period:
                     data = yf.download(
                         tickers=symbol,
                         period=period,
                         interval="1d",
-                        progress=False,
-                        ignore_tz=True
+                        progress=False
                     )
                 else:
                     data = yf.download(
@@ -70,8 +69,7 @@ class DataLoader:
                         start=start_date,
                         end=end_date,
                         interval="1d",
-                        progress=False,
-                        ignore_tz=True
+                        progress=False
                     )
                 
                 if data is None or data.empty:
