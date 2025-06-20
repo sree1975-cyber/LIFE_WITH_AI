@@ -21,9 +21,9 @@ if 'symbol' not in st.session_state:
 if 'period' not in st.session_state:
     st.session_state.period = "1y"
 if 'start_date' not in st.session_state:
-    st.session_state.start_date = None
+    st.session_state.start_date = datetime.now() - timedelta(days=365)
 if 'end_date' not in st.session_state:
-    st.session_state.end_date = None
+    st.session_state.end_date = datetime.now()
 if 'is_custom_symbol' not in st.session_state:
     st.session_state.is_custom_symbol = False
 
@@ -53,7 +53,8 @@ if data_source == "Yahoo Finance":
             st.session_state.symbol = st.text_input(
                 "Enter Stock Symbol (e.g., AAPL, CING)",
                 value=st.session_state.symbol if st.session_state.is_custom_symbol else "",
-                key="custom_symbol"
+                key="custom_symbol",
+                placeholder="e.g., AAPL, MSFT, GOOGL"
             ).upper()
         else:
             st.session_state.is_custom_symbol = False
@@ -83,36 +84,38 @@ if data_source == "Yahoo Finance":
     if period_type == "Custom Range":
         col3, col4 = st.columns(2)
         with col3:
-            st.session_state.start_date = st.date_input(
+            start_date_input = st.date_input(
                 "Start Date",
-                value=datetime.now() - timedelta(days=365),
+                value=st.session_state.start_date,
                 key="start_date"
             )
         with col4:
-            st.session_state.end_date = st.date_input(
+            end_date_input = st.date_input(
                 "End Date",
-                value=datetime.now(),
+                value=st.session_state.end_date,
                 key="end_date"
             )
     
     col5, col6 = st.columns([2, 1])
     with col5:
-        if st.button("Submit", key="submit"):
+        if st.button("📥 Submit", key="submit", type="primary"):
             if not st.session_state.symbol or not re.match(r'^[A-Z0-9.-]+$', st.session_state.symbol):
                 st.error("Please enter a valid stock symbol (e.g., AAPL, CING)")
             elif st.session_state.period == "Custom" and (
-                pd.Timestamp(st.session_state.start_date) >= pd.Timestamp(st.session_state.end_date) or 
-                pd.Timestamp(st.session_state.end_date) > pd.Timestamp.now()
+                pd.Timestamp(start_date_input) >= pd.Timestamp(end_date_input) or 
+                pd.Timestamp(end_date_input) > pd.Timestamp.now()
             ):
                 st.error("Start date must be before end date, and end date cannot be in the future")
             else:
                 with st.spinner("Downloading data from Yahoo Finance..."):
                     try:
                         if st.session_state.period == "Custom":
+                            st.session_state.start_date = start_date_input
+                            st.session_state.end_date = end_date_input
                             data = yf.download(
                                 st.session_state.symbol,
-                                start=st.session_state.start_date,
-                                end=st.session_state.end_date,
+                                start=start_date_input,
+                                end=end_date_input,
                                 interval="1d"
                             )
                         else:
@@ -158,17 +161,17 @@ if data_source == "Yahoo Finance":
                             data.columns = [col.lower() for col in data.columns]
                             
                             st.session_state.data = data
-                            st.success(f"Data loaded for {st.session_state.symbol}")
+                            st.success(f"✅ Data downloaded successfully for {st.session_state.symbol}")
                     except Exception as e:
-                        st.error(f"Error downloading data: {str(e)}")
+                        st.error(f"❌ Error downloading data: {str(e)}")
     
     with col6:
         if st.button("Clear", key="clear"):
             st.session_state.data = None
             st.session_state.symbol = "AAPL"
             st.session_state.period = "1y"
-            st.session_state.start_date = None
-            st.session_state.end_date = None
+            st.session_state.start_date = datetime.now() - timedelta(days=365)
+            st.session_state.end_date = datetime.now()
             st.session_state.is_custom_symbol = False
             st.rerun()
 
