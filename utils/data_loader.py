@@ -1,68 +1,46 @@
 import pandas as pd
 import yfinance as yf
 from datetime import datetime, timedelta
-import time
-import json
 import logging
+import streamlit as st
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def load_yfinance_data(symbol, period, start_date=None, end_date=None, retries=3, delay=5):
-    """Load stock data from yfinance for the given symbol and period with retry mechanism."""
-    # Skip validation for known valid symbols to avoid JSON decode errors
-    known_symbols = {"AAPL", "TSLA", "MSFT", "GOOGL", "AMZN"}
-    
-    for attempt in range(1, retries + 1):
-        try:
-            logger.info(f"Attempt {attempt} to load data for {symbol}, period: {period}")
-            ticker = yf.Ticker(symbol)
-            
-            # Only validate unknown symbols
-            if symbol.upper() not in known_symbols:
-                try:
-                    info = ticker.info
-                    if not info or 'symbol' not in info:
-                        raise ValueError(f"Invalid stock symbol: {symbol}")
-                except json.decoder.JSONDecodeError as e:
-                    logger.warning(f"JSON decode error during symbol validation for {symbol}: {str(e)}")
-                    raise ValueError(f"Failed to validate symbol {symbol}: JSON decode error")
-            
-            if period == "Custom":
-                if start_date >= end_date:
-                    raise ValueError("Start date must be before end date")
-                if end_date > datetime.now():
-                    raise ValueError("End date cannot be in the future")
-                data = ticker.history(start=start_date, end=end_date, raise_errors=True)
-            else:
-                period_map = {
-                    "1D": "1d", "5D": "5d", "15D": "15d", "30D": "1mo",
-                    "1M": "1mo", "3M": "3mo", "6M": "6mo", "YTD": "ytd",
-                    "1Y": "1y", "2Y": "2y", "3Y": "3y", "5Y": "5y", "MAX": "max"
-                }
-                if period not in period_map:
-                    raise ValueError(f"Invalid period: {period}")
-                data = ticker.history(period=period_map[period], raise_errors=True)
-            
-            if data.empty:
-                raise ValueError(f"No data found for {symbol} in the specified period")
-            logger.info(f"Successfully loaded data for {symbol}")
-            return data
+@st.cache_data(ttl=60)
+def load_yfinance_data(symbol, period, start_date=None, end_date=None):
+    """Load stock data from yfinance for the given symbol and period."""
+    try:
+        logger.info(f"Loading data for {symbol}, period: {period}")
         
-        except json.decoder.JSONDecodeError as e:
-            logger.warning(f"JSON decode error for {symbol} on attempt {attempt}: {str(e)}")
-            if attempt == retries:
-                raise ValueError(f"Failed to load data for {symbol} after {retries} attempts: Yahoo Finance API unavailable or rate-limited.")
-        except Exception as e:
-            logger.warning(f"Error loading data for {symbol} on attempt {attempt}: {str(e)}")
-            if attempt == retries:
-                raise ValueError(f"Failed to load data for {symbol} after {retries} attempts: {str(e)}")
+        if period == "Custom":
+            if start_date >= end_date:
+                raise ValueError("Start date must be before end date")
+            if end_date > datetime.now():
+                raise ValueError("End date cannot be in the future")
+            data = yf.download(symbol, start=start_date, end=end_date, interval="1d")
+        else:
+            period_map = {
+                "1D": "1d", "5D": "5d", "15D": "15d", "30D": "1mo",
+                "1M": "1mo", "3M": "3mo", "6M": "6mo", "YTD": "ytd",
+                "1Y": "1y", "2Y": "2y", "3Y": "3y", "5Y": "5y", "MAX": "max"
+            }
+            if period not in period_map:
+                raise ValueError(f"Invalid period: {period}")
+            data = yf.download(symbol, period=period_map[period], interval="1d")
         
-        # Exponential backoff
-        time.sleep(delay * (2 ** (attempt - 1)))  # 5s, 10s, 20s for attempts 1, 2, 3
+        if data.empty:
+            raise ValueError(f"No data found for {symbol} in the specified period")
+        
+        # Normalize column names
+        data.columns = [col.lower() for col in data.columns]
+        logger.info(f"Successfully loaded data for {symbol}")
+        return data
     
-    raise ValueError(f"Failed to load data for {symbol} after {retries} attempts")
+    except Exception as e:
+        logger.error(f"Error loading data for {symbol}: {str(e)}")
+        raise ValueError(f"Failed to load data for {symbol}: {str(e)}")
 
 def load_file_data(uploaded_file):
     """Load stock data from uploaded .csv or .xlsx file."""
