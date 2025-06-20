@@ -3,60 +3,74 @@ import yfinance as yf
 from datetime import datetime, timedelta
 import logging
 import streamlit as st
+import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 @st.cache_data(ttl=60)
-def load_yfinance_data(symbol, period, start_date=None, end_date=None):
-    """Load stock data from yfinance for the given symbol and period."""
-    try:
-        logger.info(f"Loading data for {symbol}, period: {period}")
-        
-        if period == "Custom":
-            if start_date >= end_date:
-                raise ValueError("Start date must be before end date")
-            if end_date > datetime.now():
-                raise ValueError("End date cannot be in the future")
-            data = yf.download(symbol, start=start_date, end=end_date, interval="1d")
-        else:
-            period_map = {
-                "1D": "1d", "5D": "5d", "15D": "15d", "30D": "1mo",
-                "1M": "1mo", "3M": "3mo", "6M": "6mo", "YTD": "ytd",
-                "1Y": "1y", "2Y": "2y", "3Y": "3y", "5Y": "5y", "MAX": "max"
-            }
-            if period not in period_map:
-                raise ValueError(f"Invalid period: {period}")
-            data = yf.download(symbol, period=period_map[period], interval="1d")
-        
-        if data.empty:
-            # Try fetching max period to check available range
-            try:
-                max_data = yf.download(symbol, period="max", interval="1d")
-                if not max_data.empty:
-                    start = max_data.index[0].date()
-                    end = max_data.index[-1].date()
-                    raise ValueError(
-                        f"No data found for {symbol} in the specified period. "
-                        f"Data is available from {start} to {end}. "
-                        f"Try a period like 1M, YTD, or Custom (post-{start})."
-                    )
-            except:
-                pass
-            raise ValueError(
-                f"No data found for {symbol} in the specified period. "
-                f"Try a period like 1M, YTD, another symbol (e.g., AAPL), or use File Import."
-            )
-        
-        # Normalize column names
-        data.columns = [col.lower() for col in data.columns]
-        logger.info(f"Successfully loaded data for {symbol}")
-        return data
+def load_yfinance_data(symbol, period, start_date=None, end_date=None, retries=3, delay=2):
+    """Load stock data from yfinance for the given symbol and period with retries."""
+    logger.info(f"Loading data for {symbol}, period: {period}")
     
-    except Exception as e:
-        logger.error(f"Error loading data for {symbol}: {str(e)}")
-        raise ValueError(f"Failed to load data for {symbol}: {str(e)}")
+    for attempt in range(1, retries + 1):
+        try:
+            ticker = yf.Ticker(symbol)
+            
+            if period == "Custom":
+                if start_date >= end_date:
+                    raise ValueError("Start date must be before end date")
+                if end_date > datetime.now():
+                    raise ValueError("End date cannot be in the future")
+                data = ticker.history(start=start_date, end=end_date, interval="1d")
+            else:
+                period_map = {
+                    "1D": "1d", "5D": "5d", "15D": "15d", "30D": "1mo",
+                    "1M": "1mo", "3M": "3mo", "6M": "6mo", "YTD": "ytd",
+                    "1Y": "1y", "2Y": "2y", "3Y": "3y", "5Y": "5y", "MAX": "max"
+                }
+                if period not in period_map:
+                    raise ValueError(f"Invalid period: {period}")
+                data = ticker.history(period=period_map[period], interval="1d")
+            
+            if data.empty:
+                # Try fetching max period to check available range
+                try:
+                    max_data = ticker.history(period="max", interval="1d")
+                    if not max_data.empty:
+                        start = max_data.index[0].date()
+                        end = max_data.index[-1].date()
+                        raise ValueError(
+                            f"No data found for {symbol} in period {period}. "
+                            f"Data is available from {start} to {end}. "
+                            f"Try a period like 1M, YTD, or Custom (post-{start})."
+                        )
+                except:
+                    pass
+                raise ValueError(
+                    f"No data found for {symbol} in period {period}. "
+                    f"Try a period like 1M, YTD, another symbol (e.g., AAPL), or use File Import."
+                )
+            
+            # Select required columns
+            required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+            data = data[[col for col in required_columns if col in data.columns]]
+            # Normalize column names
+            data.columns = [col.lower() for col in data.columns]
+            logger.info(f"Successfully loaded data for {symbol}")
+            return data
+        
+        except Exception as e:
+            logger.warning(f"Attempt {attempt} failed for {symbol}: {str(e)}")
+            if attempt == retries:
+                raise ValueError(
+                    f"Failed to load data for {symbol} in period {period} after {retries} attempts: {str(e)}. "
+                    f"Try a period like 1M, YTD, another symbol (e.g., AAPL), or use File Import."
+                )
+            time.sleep(delay * (2 ** (attempt - 1)))  # Exponential backoff: 2s, 4s, 8s
+    
+    raise ValueError(f"Failed to load data for {symbol} in period {period} after {retries} attempts")
 
 def load_file_data(uploaded_file):
     """Load stock data from uploaded .csv or .xlsx file."""
