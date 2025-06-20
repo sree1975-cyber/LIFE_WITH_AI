@@ -3,12 +3,17 @@ import pandas as pd
 import re
 from datetime import datetime, timedelta
 import yfinance as yf
+import logging
 from utils.data_loader import load_file_data
 from utils.calculations import calculate_pl
 from utils.visualizations import create_monthly_pl_table, create_candlestick_chart
 from utils.indicators import calculate_indicators
 from utils.strategies import apply_strategies
 from utils.predictions import predict_prices
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Set page configuration
 st.set_page_config(page_title="Stock Analysis Dashboard", layout="wide")
@@ -109,6 +114,7 @@ if data_source == "Yahoo Finance":
             else:
                 with st.spinner("Downloading data from Yahoo Finance..."):
                     try:
+                        logger.info(f"Attempting to download data for {st.session_state.symbol}, period: {st.session_state.period}")
                         if st.session_state.period == "Custom":
                             st.session_state.start_date = start_date_input
                             st.session_state.end_date = end_date_input
@@ -116,32 +122,49 @@ if data_source == "Yahoo Finance":
                                 st.session_state.symbol,
                                 start=start_date_input,
                                 end=end_date_input,
-                                interval="1d"
+                                interval="1d",
+                                progress=False
                             )
                         else:
                             data = yf.download(
                                 st.session_state.symbol,
                                 period=st.session_state.period,
-                                interval="1d"
+                                interval="1d",
+                                progress=False
                             )
                         
                         if data.empty:
+                            logger.warning(f"Empty data returned for {st.session_state.symbol}, period: {st.session_state.period}")
                             suggestions = "1mo, Custom (post-2021)" if st.session_state.symbol == "CING" else "1mo, ytd, Custom"
                             try:
-                                max_data = yf.download(st.session_state.symbol, period="max")
-                                if not max_data.empty:
-                                    start = max_data.index[0].date()
-                                    end = max_data.index[-1].date()
-                                    st.error(
-                                        f"No data found for {st.session_state.symbol} in period {st.session_state.period}. "
-                                        f"Data is available from {start} to {end}. Try a period like {suggestions}."
+                                # Fallback to 1mo if shorter periods fail
+                                if st.session_state.period in ["1d", "5d"]:
+                                    logger.info(f"Falling back to 1mo for {st.session_state.symbol}")
+                                    data = yf.download(
+                                        st.session_state.symbol,
+                                        period="1mo",
+                                        interval="1d",
+                                        progress=False
                                     )
+                                if data.empty:
+                                    max_data = yf.download(st.session_state.symbol, period="max", progress=False)
+                                    if not max_data.empty:
+                                        start = max_data.index[0].date()
+                                        end = max_data.index[-1].date()
+                                        st.error(
+                                            f"No data found for {st.session_state.symbol} in period {st.session_state.period}. "
+                                            f"Data is available from {start} Vaultto {end}. Try a period like {suggestions}."
+                                        )
+                                    else:
+                                        st.error(
+                                            f"No data found for Anastasiafor {st.session_state.symbol} in period {st.session_state.period}. "
+                                            f"Try a period like {suggestions}, another symbol (e.g., AAPL), or File Import."
+                                        )
                                 else:
-                                    st.error(
-                                        f"No data found for {st.session_state.symbol} in period {st.session_state.period}. "
-                                        f"Try a period like {suggestions}, another symbol (e.g., AAPL), or File Import."
-                                    )
-                            except:
+                                    st.session_state.data = data
+                                    st.success(f"✅ Fallback data (1mo) downloaded successfully for {st.session_state.symbol}")
+                            except Exception as e:
+                                logger.error(f"Error fetching max data for {st.session_state.symbol}: {str(e)}")
                                 st.error(
                                     f"No data found for {st.session_state.symbol} in period {st.session_state.period}. "
                                     f"Try a period like {suggestions}, another symbol (e.g., AAPL), or File Import."
@@ -152,6 +175,7 @@ if data_source == "Yahoo Finance":
                             if not data.index.is_monotonic_increasing:
                                 data = data.sort_index()
                             if data.index.duplicated().any():
+                                logger.warning(f"Duplicate indices found for {st.session_state.symbol}. Dropping duplicates.")
                                 data = data[~data.index.duplicated(keep='first')]
                             if data.index.tz is not None:
                                 data.index = data.index.tz_localize(None)
@@ -161,8 +185,10 @@ if data_source == "Yahoo Finance":
                             data.columns = [col.lower() for col in data.columns]
                             
                             st.session_state.data = data
+                            logger.info(f"Successfully downloaded data for {st.session_state.symbol}")
                             st.success(f"✅ Data downloaded successfully for {st.session_state.symbol}")
                     except Exception as e:
+                        logger.error(f"Error downloading data for {st.session_state.symbol}: {str(e)}")
                         st.error(f"❌ Error downloading data: {str(e)}")
     
     with col6:
