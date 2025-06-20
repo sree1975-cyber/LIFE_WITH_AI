@@ -40,13 +40,13 @@ def load_yfinance_data(symbol, period, start_date=None, end_date=None):
                     raise ValueError(
                         f"No data found for {symbol} in the specified period. "
                         f"Data is available from {start} to {end}. "
-                        f"Try a different period (e.g., 1M, YTD) or use File Import."
+                        f"Try a period like 1M, YTD, or Custom (post-{start})."
                     )
             except:
                 pass
             raise ValueError(
                 f"No data found for {symbol} in the specified period. "
-                f"Try a different period (e.g., 1M, YTD), another symbol (e.g., AAPL), or use File Import."
+                f"Try a period like 1M, YTD, another symbol (e.g., AAPL), or use File Import."
             )
         
         # Normalize column names
